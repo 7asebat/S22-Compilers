@@ -1,0 +1,56 @@
+// This is a comment
+
+// Variable
+id: int = 8
+
+// Constant
+const const_id: uint = 8
+
+// Mathematical and logical expressions
+id = id + 1
+id += 3
+id = id & 3
+id %= 4
+id > 3
+id == 3
+id != 4
+-id
+!id
+~id
+
+// Flow control
+if id > 4
+{
+	x = 4
+}
+else
+{
+	y = 5
+}
+
+while id > 4
+{
+	x += 9
+}
+
+do
+{
+
+} while id > 4
+
+
+for i: int = 0; i < N; i += 1
+{
+
+}
+
+switch i
+{
+	case 0 {
+		w >>= 4
+	}
+	
+	case 9 {
+		wong >>= 66
+	}
+}

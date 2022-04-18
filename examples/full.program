@@ -27,9 +27,17 @@ if id > 4
 	x = 4;
 	x = 4;
 }
-else
+else if id < 3
 {
 	y = 5;
+}
+else if id < 3
+{
+	y = 5;
+}
+else
+{
+	// Literally anything
 }
 
 while id > 4
@@ -41,8 +49,20 @@ do
 {
 	do
 	{
+		my_procedure: proc(x: int, y: int) -> int
+		{
+			my_procedure2: proc()
+			{
+				x += 3;
 
-	} while id > 4;
+				{
+					y: bool = my_procedure(x, y);
+				}
+
+				return;
+			}
+		}
+	} while true;
 } while id > 4;
 
 

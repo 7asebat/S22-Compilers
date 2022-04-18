@@ -1,23 +1,27 @@
+// Top level code
 %code top {
     #include <stdio.h>	// printf
 }
 
+// Different types of tokens
 %union {
     const char* lexeme;
     unsigned long long value;
 }
 
-%locations
-%define api.pure full
+%locations              // Generate token location code
+%define api.pure full   // Modify yylex to receive parameters as shown in %code provides
 
+// Forward declarations for Lexer
 %code provides {
     int
-    yylex(YYSTYPE*, YYLTYPE*);
+    yylex(YYSTYPE *symbol, YYLTYPE *location);
 
     void
-    yyerror(YYLTYPE *loc, const char* msg);
+    yyerror(YYLTYPE *location, const char *message);
 }
 
+// Enable debugging
 %define parse.trace
 
 // TOKENS
@@ -34,9 +38,12 @@
 %token <value> SHL SHR
 //// Assignment operators
 %token <value> AS_ADD AS_SUB AS_MUL AS_DIV AS_MOD AS_AND AS_OR AS_XOR AS_SHL AS_SHR 
-/// Other
+//// Return value separator
+%token <value> ARROW
+
+/// Others
 %token <lexeme> IDENTIFIER
-%token <value> VALUE
+%token <value> CONSTANT
 
 // Non-terminal types and print routines
 %type <value> expr expr_math expr_logic 
@@ -44,10 +51,10 @@
 
 %printer { fprintf(yyo, "%s", $$); } type
 %printer { fprintf(yyo, "%s", $$); } IDENTIFIER
-%printer { fprintf(yyo, "%d", $$); } VALUE
+%printer { fprintf(yyo, "%d", $$); } CONSTANT
 %printer { fprintf(yyo, "%d", $$); } expr
 
-// PRECEDENCE (LOWEST TO HIGHEST)
+// OPERATOR PRECEDENCE (LOWEST TO HIGHEST)
 %left L_OR
 %left L_AND
 
@@ -69,17 +76,125 @@
 program:
     stmt_list { yyerror(&@$, "Complete!"); }
 
+// stmt *
 stmt_list:
     stmt_list stmt
-    | // EMPTY
+    | %empty
     ;
 
 scope:
     '{' stmt_list '}'
 
 stmt:
-    decl ';' | assignment ';' | expr ';' | conditional | loop
-    | scope
+    scope
+
+    | conditional
+    | loop
+
+    | decl_var ';'
+    | decl_const ';'
+    | decl_proc
+
+    | assignment ';'
+
+    // Expressions (mainly procedure calls)
+    | expr ';'
+
+	// Return values
+    | RETURN expr ';'
+    | RETURN ';'
+    ;
+
+conditional:
+    IF expr
+        scope
+	// Optional else if
+    conditional_else_if
+    // Optional else
+    conditional_else
+    |
+
+    SWITCH expr
+        '{' switch_list '}';
+    ;
+
+// else_if *
+conditional_else_if:
+    conditional_else_if
+
+    ELSE IF expr
+        scope
+
+    | %empty
+    ;
+
+// else ?
+conditional_else:
+    ELSE 
+        scope
+    | %empty
+    ;
+
+// case *
+switch_list:
+    switch_list CASE CONSTANT
+        scope
+    | %empty
+    ;
+
+loop:
+    WHILE expr
+        scope
+    |
+
+    DO
+        scope 
+    WHILE expr ';'
+    |
+
+    FOR decl_var ';' expr_logic ';' assignment
+        scope
+    ;
+
+decl_var:
+    IDENTIFIER ':' type 			{} // No action
+    | IDENTIFIER ':' type '=' expr 	{} // No action
+    ;
+
+decl_const:
+    CONST IDENTIFIER ':' type '=' expr 	{} // No action
+
+decl_proc:
+    // Optional parameter list
+    // Optional return type
+    IDENTIFIER ':' PROC '(' decl_proc_params ')' decl_proc_return
+        scope
+    ;
+
+
+// param *
+// Had to be split to allow left recursive grammar without the (, one_param) case
+decl_proc_params:
+    decl_proc_params_list
+    | %empty
+    ;
+
+decl_proc_params_list:
+    decl_proc_params_list ',' decl_var
+    | decl_var
+    ;
+
+// return ?
+decl_proc_return:
+    ARROW type
+    | %empty
+    ;
+
+type:
+    INT 	{ $$ = "int"; }
+    | UINT 	{ $$ = "uint"; }
+    | FLOAT { $$ = "float"; }
+    | BOOL 	{ $$ = "bool"; }
     ;
 
 assignment:
@@ -96,65 +211,16 @@ assignment:
     | IDENTIFIER AS_SHR expr
     ;
 
-conditional:
-    IF expr
-        scope
-    |
-
-    IF expr 
-        scope 
-    ELSE 
-        scope
-    |
-
-    SWITCH expr
-        '{' switch_list '}';
-    ;
-
-
-switch_list:
-    switch_list switch_case
-    | // EMPTY
-    ;
-
-switch_case:
-    CASE VALUE
-        scope;
-
-loop:
-    WHILE expr
-        scope
-    |
-
-    DO
-        scope WHILE expr ';'
-    |
-
-    FOR decl_var ';' expr_logic ';' assignment
-        scope
-    ;
-
-decl:
-    decl_var | decl_const
-    ;
-
-decl_var:
-    IDENTIFIER ':' type 			{}
-    | IDENTIFIER ':' type '=' expr 	{}
-    ;
-
-decl_const:
-    CONST IDENTIFIER ':' type '=' expr 	{}
-
 expr:
     expr_math | expr_logic
+    | proc_call {}
     | IDENTIFIER {}
-    | VALUE | TRUE | FALSE
+    | CONSTANT | TRUE | FALSE
 
 expr_math:
-    '-' expr %prec U_MINUS {}
-    | '!' expr %prec U_LOGICAL {}
-    | '~' expr %prec U_LOGICAL {}
+    '-' expr %prec U_MINUS {} // No action
+    | '!' expr %prec U_LOGICAL {} // No action
+    | '~' expr %prec U_LOGICAL {} // No action
     | expr '+' expr
     | expr '-' expr
     | expr '*' expr
@@ -166,8 +232,7 @@ expr_math:
     | expr SHR expr
     ;
 
-expr_logic:
-    expr '<' expr
+expr_logic: expr '<' expr
     | expr LEQ expr
     | expr EQ expr
     | expr NEQ expr
@@ -177,10 +242,19 @@ expr_logic:
     | expr L_OR expr
     ;
 
-type:
-    INT 	{ $$ = "int"; }
-    | UINT 	{ $$ = "uint"; }
-    | FLOAT { $$ = "float"; }
-    | BOOL 	{ $$ = "bool"; }
+proc_call:
+    // Optional parameters
+    IDENTIFIER '(' proc_call_params ')'
+
+// param *
+// Had to be split to allow left recursive grammar without the (, one_param) case
+proc_call_params:
+    proc_call_params_list
+    | %empty
+    ;
+
+proc_call_params_list:
+    proc_call_params_list ',' expr
+    | expr
     ;
 %%

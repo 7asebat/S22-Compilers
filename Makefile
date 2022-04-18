@@ -1,6 +1,5 @@
 compile:
 	mkdir -p build
-	cp src/Common.h build/Common.h
 	flex -o build/Lexer.c src/Lexer.l
 	bison -d -o build/Parser.c -v src/Parser.y 
 	g++ build/*.c -o build/out -w -std=c++17 -g
@@ -13,6 +12,3 @@ debug:
 
 clean:
 	rm -rf build/*
-
-bt: compile run
-cl: clean bt

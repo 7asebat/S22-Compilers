@@ -45,23 +45,25 @@ while id > 4
 	x += 9;
 }
 
+my_procedure: proc(x: int, y: int) -> int
+{
+	my_procedure2: proc()
+	{
+		x += 3;
+
+		{
+			y: bool = my_procedure(x, y);
+		}
+
+		return;
+	}
+}
+
 do
 {
 	do
 	{
-		my_procedure: proc(x: int, y: int) -> int
-		{
-			my_procedure2: proc()
-			{
-				x += 3;
-
-				{
-					y: bool = my_procedure(x, y);
-				}
-
-				return;
-			}
-		}
+		my_procedure(x);
 	} while true;
 } while id > 4;
 

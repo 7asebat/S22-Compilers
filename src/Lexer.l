@@ -1,16 +1,12 @@
 %{
     /* Forward declarations used for lexing */
     #include <stdlib.h>  // atoi
-    #include "parser.h"  // INTEGER
+    #include "Parser.h"  // INTEGER
 
-    void
-    yyerror(char*);
-
-    static int next_column = 1;
-    int column = 1;
 
     void
     update_location(const char* text, YYLTYPE *loc);
+    static int column = 1;
 
     #define YY_USER_ACTION update_location(yytext, yylloc);
 %}
@@ -85,7 +81,7 @@ bool     return BOOL;
 [ \t]+       ; /* skip whitespace */
 {line}       column = 1; /* skip lines */
 
-.             yyerror("Unexpected character"); /* Any other character */
+.            yyerror(yylloc, "Unexpected character"); /* Any other character */
 
 %%
 int
@@ -118,4 +114,12 @@ update_location(const char* text, YYLTYPE *loc)
     loc->last_column = loc->first_column + yyleng;
 
     column = loc->last_column;
+}
+
+void
+yyerror(YYLTYPE *loc, const char* msg)
+{
+    fprintf(stderr, "%d,%d --- %d,%d: %s (%s)\n",
+            loc->first_line, loc->first_column, loc->last_line, loc->last_column,
+            yytext, msg);
 }

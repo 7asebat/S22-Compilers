@@ -1,7 +1,5 @@
 %code top {
     #include <stdio.h>	// printf
-
-    extern void yyerror(char *s);
 }
 
 %union {
@@ -10,10 +8,14 @@
 }
 
 %locations
-%define api.pure
+%define api.pure full
 
 %code provides {
-    int yylex(YYSTYPE*, YYLTYPE*);
+    int
+    yylex(YYSTYPE*, YYLTYPE*);
+
+    void
+    yyerror(YYLTYPE *loc, const char* msg);
 }
 
 %define parse.trace
@@ -65,7 +67,7 @@
 %%
 
 program:
-    stmt_list { YY_LOCATION_PRINT(stderr, @$); puts(""); }
+    stmt_list { yyerror(&@$, "Complete!"); }
 
 stmt_list:
     stmt_list stmt
@@ -182,9 +184,3 @@ type:
     | BOOL 	{ $$ = "bool"; }
     ;
 %%
-
-void
-yyerror(char *s)
-{
-    fprintf(stderr, "%s\n", s);
-}

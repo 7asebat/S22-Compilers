@@ -39,7 +39,10 @@ while id > 4
 
 do
 {
+	do
+	{
 
+	} while id > 4;
 } while id > 4;
 
 

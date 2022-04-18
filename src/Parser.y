@@ -2,7 +2,6 @@
     #include <stdio.h>	// printf
 
     extern void yyerror(char *s);
-    extern int yylex();	// Lexer
 }
 
 %union {
@@ -10,36 +9,43 @@
     unsigned long long value;
 }
 
+%locations
+%define api.pure
+
+%code provides {
+    int yylex(YYSTYPE*, YYLTYPE*);
+}
+
 %define parse.trace
 
-// Text values
-%token <lexeme> IDENTIFIER
-%token <value> VALUE
-
-// Keywords
+// TOKENS
+/// Keywords
 %token <value> CONST WHILE DO FOR SWITCH CASE PROC RETURN
 %token <value> TRUE FALSE
 %token <value> INT UINT FLOAT BOOL
-
-// Operators
-%token <value> SHL SHR LEQ EQ NEQ GEQ
-%token <value> L_AND L_OR
-%token <value> AS_ADD AS_SUB AS_MUL AS_DIV AS_MOD AS_AND AS_OR AS_XOR AS_SHL AS_SHR 
-
-// Spacing
-%token <value> NL
-
 %token <value> IF ELSE
-%nonassoc ELSE
 
+/// Operators
+//// Logical operators
+%token <value> L_AND L_OR LEQ EQ NEQ GEQ
+//// Bitwise operators
+%token <value> SHL SHR
+//// Assignment operators
+%token <value> AS_ADD AS_SUB AS_MUL AS_DIV AS_MOD AS_AND AS_OR AS_XOR AS_SHL AS_SHR 
+/// Other
+%token <lexeme> IDENTIFIER
+%token <value> VALUE
+
+// Non-terminal types and print routines
 %type <value> expr expr_math expr_logic 
 %type <lexeme> type
 
+%printer { fprintf(yyo, "%s", $$); } type
 %printer { fprintf(yyo, "%s", $$); } IDENTIFIER
 %printer { fprintf(yyo, "%d", $$); } VALUE
 %printer { fprintf(yyo, "%d", $$); } expr
 
-// Precedence
+// PRECEDENCE (LOWEST TO HIGHEST)
 %left L_OR
 %left L_AND
 
@@ -53,35 +59,25 @@
 %left '+' '-'
 %left '*' '/' '%'
 
-%nonassoc U_LOGICAL
-%nonassoc U_MINUS
+%nonassoc U_LOGICAL // Unary logical operators !,~
+%nonassoc U_MINUS   // Unary -
 
 %%
 
 program:
-    stmt_list
+    stmt_list { YY_LOCATION_PRINT(stderr, @$); puts(""); }
 
 stmt_list:
-    wrapping_NL stmts wrapping_NL
-    | wrapping_NL // EMPTY
-    ;
-
-wrapping_NL:
-    NL 
+    stmt_list stmt
     | // EMPTY
     ;
 
-stmts:
-    stmts NL stmt
-    | stmt
-    ;
-
-braced_block:
+scope:
     '{' stmt_list '}'
 
 stmt:
-    decl | assignment | expr | conditional | loop
-    | braced_block
+    decl ';' | assignment ';' | expr ';' | conditional | loop
+    | scope
     ;
 
 assignment:
@@ -99,47 +95,46 @@ assignment:
     ;
 
 conditional:
-    IF expr NL 
-        braced_block NL
+    IF expr
+        scope
     |
 
-    IF expr NL 
-        braced_block NL 
-    ELSE NL 
-        braced_block
+    IF expr 
+        scope 
+    ELSE 
+        scope
     |
 
-    SWITCH expr NL
-        '{' switch_list '}'
+    SWITCH expr
+        '{' switch_list '}';
     ;
+
 
 switch_list:
-    wrapping_NL switch_cases wrapping_NL
-    ;
-
-switch_cases:
-    switch_cases NL switch_case
-    | switch_case
+    switch_list switch_case
+    | // EMPTY
     ;
 
 switch_case:
-    CASE VALUE braced_block;
+    CASE VALUE
+        scope;
 
 loop:
-    WHILE expr NL 
-        braced_block
+    WHILE expr
+        scope
     |
 
-    DO NL
-        braced_block WHILE expr
+    DO
+        scope WHILE expr ';'
     |
 
-    FOR decl_var ';' expr_logic ';' assignment NL
-        braced_block
+    FOR decl_var ';' expr_logic ';' assignment
+        scope
     ;
 
 decl:
-    decl_var | decl_const;
+    decl_var | decl_const
+    ;
 
 decl_var:
     IDENTIFIER ':' type 			{}

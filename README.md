@@ -17,7 +17,7 @@ $ make run
 - [x] Simple syntax error handler
 
 ### Phase 2
-- [ ] [AST](src/Common.h)
+- [ ] [AST](src/AST/AST.h)
 - [ ] Design a suitable and extensible format for the symbol table
 - [ ] Design suitable action rules to produce the output quadruples
 - [ ] Implement a proper syntax error handler

@@ -4,6 +4,9 @@ compile:
 	bison -d -o build/Parser.c -v src/Parser.y 
 	g++ build/*.c -o build/out -w -std=c++17 -g
 
+ast:
+	g++ src/AST/*.cpp -std=c++17 -g -o src/AST/ast
+
 run:
 	build/out examples/full.program
 

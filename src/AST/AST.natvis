@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <!-- Types -->
+  <Type Name="AST::Node">
+    <!-- <DisplayString Condition="kind == AST::Node::CONSTANT">const</DisplayString> -->
+    <DisplayString>not const</DisplayString>
+  </Type>
+</AutoVisualizer> 

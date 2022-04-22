@@ -22,3 +22,4 @@ $ make run
 - [ ] Design suitable action rules to produce the output quadruples
 - [ ] Implement a proper syntax error handler
 - [ ] Build a simple semantic analyzer
+- [ ] Implement a simple GUI to insert the input source code and show the output quadruples, symbol table, and syntax and semantic errors (if exist).

@@ -53,6 +53,7 @@ my_procedure: proc(x: int, y: int) -> int
 
 		{
 			y: bool = my_procedure(x, y);
+			return 4;
 		}
 
 		return;

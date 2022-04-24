@@ -1,0 +1,43 @@
+{
+	"cmake.debugConfig": {
+		"args": [
+			"examples/full.program"
+		],
+		"cwd": "${workspaceFolder}",
+		"visualizerFile": "${workspaceFolder}/.vscode/compiler.natvis"
+	},
+    "C_Cpp.default.cppStandard": "c++20",
+	"files.associations": {
+		"*.h": "cpp",
+		"xstring": "cpp",
+		"format": "cpp",
+		"vector": "cpp",
+		"charconv": "cpp",
+		"compare": "cpp",
+		"locale": "cpp",
+		"system_error": "cpp",
+		"xlocale": "cpp",
+		"xlocinfo": "cpp",
+		"xlocnum": "cpp",
+		"xloctime": "cpp",
+		"xmemory": "cpp",
+		"xstddef": "cpp",
+		"xutility": "cpp",
+		"string": "cpp",
+		"algorithm": "cpp",
+		"atomic": "cpp",
+		"bit": "cpp",
+		"cmath": "cpp",
+		"cstddef": "cpp",
+		"limits": "cpp",
+		"map": "cpp",
+		"memory": "cpp",
+		"new": "cpp",
+		"tuple": "cpp",
+		"type_traits": "cpp",
+		"utility": "cpp",
+		"variant": "cpp",
+		"xtr1common": "cpp",
+		"xtree": "cpp"
+	}
+}

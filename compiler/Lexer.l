@@ -1,17 +1,11 @@
 /* DEFINITIONS SECTION */
 %{
-    #include <stdlib.h>  // atoi
-    #include "Parser.h"  // Token definitions
+    #include <stdlib.h>    // atoi
+    #include <stdio.h>     // getline
+    #include "Parser.hpp"  // Token definitions
 
-    // Handles token location
-    void
-    update_location(const char* text, YYLTYPE *loc);
-    
-    // Call update_location before each token is processed
-    #define YY_USER_ACTION update_location(yytext, yylloc);
-
-    // Last seen column
-    static int column = 1;
+    // Call location_update before each token is processed
+    #define YY_USER_ACTION location_update(yylloc);
 %}
 
 /* Use yylex(symbol_pointer, location_pointer) */
@@ -20,6 +14,10 @@
 %option yylineno
 /* Do not wrap once EOF is hit */
 %option noyywrap
+/* Do not depend on platform specific headers */
+%option nounistd
+/* Only read input files */
+%option never-interactive
 
 /* Unique identifiers */
 id_prefix  [_a-zA-Z]
@@ -91,22 +89,24 @@ bool     return BOOL;
 
 [;:{},]     return *yytext; /* Return these characters as is */
 "("|")"     return *yytext;  
+"["|"]"     return *yytext;  
 {operator}  return *yytext;
 
 [ \t]+       ; /* skip whitespace */
-{line}       column = 1; /* skip lines and reset current column to beginning */
+{line}       ; /* skip lines */
 
-.            yyerror(yylloc, "Unexpected character"); /* Any other character */
+.            yyerror(yylloc, nullptr, "Unexpected character"); /* Any other character */
 
 %%
 /* OTHERS SECTION */
-
 // Entry point
 int
 main(int argc, char *argv[])
 {
     // Input stream, open first argument as a file
     yyin = fopen(argv[1], "r");
+    if (yyin == nullptr)
+        return -1;
 
 	// Disable debugging by default, set debugging if second arg is passed
     yydebug = 0;
@@ -114,32 +114,10 @@ main(int argc, char *argv[])
         yydebug = 1;
 
     // Run parser
-    yyparse();
+    s22::Parser parser = {};
+    parser.current_scope = &parser.global;
+    yyparse(&parser);
 
     fclose(yyin);
     return 0;
-}
-
-void
-update_location(const char* text, YYLTYPE *loc)
-{
-    // Current line and column
-    loc->first_line = yylineno;
-    loc->first_column = column;
-
-    // Next line and column
-    loc->last_line = yylineno;
-    loc->last_column = loc->first_column + yyleng;
-
-    // Update current column
-    column = loc->last_column;
-}
-
-// Error handling function
-void
-yyerror(YYLTYPE *location, const char* message)
-{
-    fprintf(stderr, "%d,%d --- %d,%d: %s (%s)\n",
-            location->first_line, location->first_column, location->last_line, location->last_column,
-            yytext, message);
 }

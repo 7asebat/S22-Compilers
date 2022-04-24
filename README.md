@@ -12,12 +12,11 @@ $ make run
 
 ## Checklist
 ### Phase 1
-- [x] [Lexer](src/Lexer.l)
-- [x] [Parser](src/Parser.y)
+- [x] [Lexer](compiler/Lexer.l)
+- [x] [Parser](compiler/Parser.y)
 - [x] Simple syntax error handler
 
 ### Phase 2
-- [ ] [AST](src/AST/AST.h)
 - [ ] Design a suitable and extensible format for the symbol table
 - [ ] Design suitable action rules to produce the output quadruples
 - [ ] Implement a proper syntax error handler

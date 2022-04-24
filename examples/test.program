@@ -1,0 +1,95 @@
+// This is a comment
+
+my_procedure: proc(x: int, y: int) -> int
+{
+}
+
+// Variable
+id: int = 8;
+id2: float = 00.7700;
+id3: **uint;
+id4: [4]int;
+id5: [4]*int;
+
+// Constant
+const const_id: uint = 8;
+
+// Mathematical  logical expressions
+id = id + 1;
+id += 3;
+id = id & 3;
+id %= 4;
+id > 3;
+id == 3;
+id != 4;
+-id;
+!id;
+~id;
+
+// Flow control
+if id > 4
+{
+	id: int = 4;
+	x = 4;
+	x = 4;
+	x = 4;
+	x = 4;
+}
+else if id < 3
+{
+	y = 5;
+}
+else if id < 3
+{
+	y = (5 + (-3 ^ 2)) * (3 + 4);
+}
+else
+{
+	// Literally anything
+}
+
+while id > 4
+{
+	x += 9;
+}
+
+my_procedure: proc(x: int, y: int) -> int
+{
+	my_procedure2: proc(x: int, y: int)
+	{
+		x: float;
+		x += y[(my_procedure(x, y)) * (4 + 3)];
+
+		{
+			y: bool = my_procedure(x, y);
+			return 4;
+		}
+
+		return;
+	}
+}
+
+do
+{
+	do
+	{
+		my_procedure(x);
+	} while true;
+} while id > 4;
+
+
+for i: int = 0; i < N; i += 1
+{
+
+}
+
+switch i
+{
+	case 0, 2, 4 {
+		w >>= 4;
+	}
+	
+	case 9 {
+		wong >>= 66;
+	}
+}

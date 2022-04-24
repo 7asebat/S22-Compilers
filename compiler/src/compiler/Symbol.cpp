@@ -70,18 +70,18 @@ namespace s22
 
 	template<typename T>
 	inline static T *
-	push_entry(Symbol_Table *self)
+	push_entry(Scope *self)
 	{
 		if (self->table.empty())
 			self->table.reserve(256);
 
-		Symbol_Table::Entry entry = T{};
+		Scope::Entry entry = T{};
 		self->table.push_back(entry);
 		return &std::get<T>(self->table.back());
 	}
 
 	Result<Symbol *>
-	symtab_add_decl(Symbol_Table *self, const Symbol &symbol)
+	scope_add_decl(Scope *self, const Symbol &symbol)
 	{
 		// Try to find duplicate
 		for (const auto &entry : self->table)
@@ -90,7 +90,7 @@ namespace s22
 			{
 				auto &dup = std::get<Symbol>(entry);
 				if (dup.id == symbol.id)
-					return Error{"Duplicate identifier at {}", dup.defined_at};
+					return Error{symbol.defined_at, "Duplicate identifier at {}", dup.defined_at};
 			}
 		}
 
@@ -100,16 +100,16 @@ namespace s22
 	}
 
 	Result<Symbol *>
-	symtab_add_decl(Symbol_Table *self, const Symbol &symbol, Expr &expr)
+	scope_add_decl(Scope *self, const Symbol &symbol, Expr &expr)
 	{
-		auto [type, err] = expr_evaluate(expr, self);
+		auto err = expr_evaluate(expr, self);
 		if (err)
 			return err;
 
-		if (symbol.type != type)
-			return Error{"type mismatch"};
+		if (symbol.type != expr.type)
+			return Error{expr.loc, "type mismatch"};
 
-		auto [sym, sym_err] = symtab_add_decl(self, symbol);
+		auto [sym, sym_err] = scope_add_decl(self, symbol);
 		if (sym_err)
 			return sym_err;
 
@@ -117,12 +117,12 @@ namespace s22
 		return sym;
 	}
 
-	Symbol_Table *
-	symtab_push_scope(Symbol_Table *&self)
+	Scope *
+	scope_push(Scope *&self)
 	{
 		auto parent = self;
 
-		auto inner = push_entry<Symbol_Table>(self);
+		auto inner = push_entry<Scope>(self);
 		inner->parent_scope = self;
 		inner->idx_in_parent_table = self->table.size()-1;
 
@@ -130,8 +130,30 @@ namespace s22
 		return parent;
 	}
 
-	Symbol_Table *
-	symtab_pop_scope(Symbol_Table *&self)
+	Error
+	scope_return_is_valid(Scope *self, Symbol_Type type)
+	{
+		// Trace scope upwards until a function is found
+		for (auto current_scope = self; current_scope != nullptr; current_scope = current_scope->parent_scope)
+		{
+			if (self->procedure == false)
+				continue;
+
+			if (*self->procedure != type)
+			{
+				return Error{"type mismatch"};
+			}
+			else
+			{
+				return Error{}; // valid
+			}
+		}
+
+		return Error{"not within a function"};
+	}
+
+	Scope *
+	scope_pop(Scope *&self)
 	{
 		for (const auto &entry : self->table)
 		{
@@ -150,7 +172,7 @@ namespace s22
 	}
 
 	Symbol *
-	symtab_get_id(Symbol_Table *self, const char *id)
+	scope_get_id(Scope *self, const char *id)
 	{
 		size_t current_scope_idx_in_parent = self->table.size();
 		for (auto current_scope = self; current_scope != nullptr;)
@@ -173,21 +195,20 @@ namespace s22
 		return nullptr;
 	}
 
-	Procedure *
-	symtab_make_procedure(Symbol_Table *self, Symbol_Type return_type)
+	Procedure
+	scope_make_proc(Scope *self, Symbol_Type return_type)
 	{
-		auto *proc = alloc<Procedure>();
-		proc->parameters = Buf<Symbol_Type>::make(self->table.size());
-		for (size_t i = 0; i < proc->parameters.count; i++)
+		Procedure proc = {};
+		proc.parameters = Buf<Symbol_Type>::make(self->table.size());
+		for (size_t i = 0; i < proc.parameters.count; i++)
 		{
 			auto &param = std::get<Symbol>(self->table[i]);
-			proc->parameters[i] = param.type;
+			proc.parameters[i] = param.type;
 		}
 
 		if (return_type.base != Symbol_Type::VOID)
 		{
-			proc->return_type = alloc<Symbol_Type>();
-			*proc->return_type = return_type;
+			proc.return_type = return_type;
 		}
 
 		return proc;

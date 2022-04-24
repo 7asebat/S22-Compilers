@@ -49,26 +49,60 @@ namespace s22
 		ptr = nullptr;
 	}
 
+	struct Location
+	{
+		int first_line, first_column;
+		int last_line, last_column;
+
+		inline bool
+		operator ==(const Location &other) const
+		{
+			return first_line   == other.first_line &&
+				   first_column == other.first_column &&
+				   last_line    == other.last_line &&
+				   last_column  == other.last_column;
+		}
+
+		inline bool
+		operator !=(const Location &other) const { return !operator==(other); }
+	};
+
+	void
+	location_reduce(Location &current, Location *rhs, size_t N);
+
+	void
+	location_update(Location *loc);
+
+	void
+	location_print(FILE *out, const Location *loc);
+
 	struct Error
 	{
 		std::string msg;
+		Location loc;
 
 		// creates a new empty error (not an error)
-		Error() : msg({}) {}
+		Error() : msg({}), loc({}) {}
 
 		// creates a new error with the given error message
 		template<typename... TArgs>
-		Error(const char *fmt, TArgs &&...args) : msg(std::format(fmt, std::forward<TArgs>(args)...)) {}
+		Error(const char *fmt, TArgs &&...args) : msg(std::format(fmt, std::forward<TArgs>(args)...)), loc({}) {}
 
-		Error(const Error &other) : msg(other.msg) {}
+		template<typename... TArgs>
+		Error(Location loc, const char *fmt, TArgs &&...args) : msg(std::format(fmt, std::forward<TArgs>(args)...)), loc(loc) {}
 
-		Error(Error &&other) : msg(std::move(other.msg)) { other.msg = {}; }
+		Error(Location loc, const Error &other) : msg(other.msg), loc(loc) {}
+
+		Error(const Error &other) : msg(other.msg), loc(other.loc) {}
+
+		Error(Error &&other) : msg(std::move(other.msg)), loc(std::move(other.loc)) { other.msg = {}; }
 
 		inline Error &
 		operator=(const Error &other)
 		{
 			msg.clear();
 			msg = other.msg;
+			loc = other.loc;
 			return *this;
 		}
 
@@ -77,6 +111,7 @@ namespace s22
 		{
 			msg.clear();
 			msg = other.msg;
+			loc = other.loc;
 			other.msg = {};
 			return *this;
 		}
@@ -162,7 +197,23 @@ namespace s22
 			}
 			return true;
 		}
+
+		inline Buf<T>&
+		operator=(const T* other) { return *this; }
 	};
+
+	template <>
+	inline Buf<char>&
+	Buf<char>::operator=(const char *other)
+	{
+		this->count = strlen(other);
+		this->data = alloc<char>(this->count + 1);
+		memcpy(this->data, other, this->count);
+
+		return *this;
+	}
+
+	using Str = Buf<char>;
 
 	template <typename T>
 	struct Optional
@@ -189,22 +240,16 @@ namespace s22
 			return *data == *other.data;
 		}
 
-		T &
-		operator*()
-		{
-			if (data == nullptr)
-				data = alloc<T>();
-
-			return *data;
-		}
+		inline T &
+		operator*() { return *data; }
 
 		inline const T&
 		operator *() const { return *data; }
 
-		T*
+		inline T*
 		operator ->() { return data; }
 
-		const T*
+		inline const T*
 		operator ->() const { return data; }
 
 		inline Optional &
@@ -212,6 +257,9 @@ namespace s22
 
 		inline Optional &
 		operator =(const T& other) { data = alloc<T>(); *data = T{other}; return *this; }
+
+		inline T
+		operator |(const T& other) { return bool(*this) ? *data : other; }
 	};
 
 }

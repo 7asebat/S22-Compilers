@@ -1,8 +1,10 @@
-// This is a comment
-global: int = 3;
-global2: [4]int;
+f: proc(x: int, y: int, z: int)
+{
+    x += y & z;
+}
 
-(global + 3) * ~global2 + global;
-(global + 3) * ~global + global3;
-(global3 + 3) * global + global;
+f2: proc() -> float { return 2.0; }
 
+arr: [4]int;
+
+f(1, arr[2], 3, f2());

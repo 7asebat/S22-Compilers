@@ -50,7 +50,8 @@
 
 /// Others
 %token <lexeme> IDENTIFIER
-%token <value> CONSTANT
+%token <value> LIT_INT LIT_UINT LIT_FLOAT
+%nterm <expr> literal
 
 // Non-terminal types and print routines
 %type <expr> expr expr_math expr_logic proc_call array_access
@@ -59,7 +60,6 @@
 
 %printer { symtype_print(yyo, $$); } type
 %printer { fprintf(yyo, "%s", $$); } IDENTIFIER
-%printer { fprintf(yyo, "%llu", $$); } CONSTANT
 
 // OPERATOR PRECEDENCE (LOWEST TO HIGHEST)
 %left L_OR
@@ -89,7 +89,8 @@ program:
 
 // stmt *
 stmt_list:
-    stmt_list { p->new_stmt(); } stmt
+    stmt_list
+    { p->new_stmt(); } stmt
     | %empty
     ;
 
@@ -119,17 +120,15 @@ stmt:
     | expr ';'
 
 	// Return values
-    | RETURN expr ';'
-    | RETURN ';'
+    | RETURN expr ';' { p->return_value(@RETURN, $expr); }
+    | RETURN ';'      { p->return_value(@RETURN); }
     ;
 
 conditional:
     IF expr
         scope
-	// Optional else if
-    conditional_else_if
-    // Optional else
-    conditional_else
+    conditional_else_if /* Optional else if */
+    conditional_else    /* Optional else */
     |
 
     SWITCH expr
@@ -155,14 +154,14 @@ conditional_else:
 
 // case *
 switch_list:
-    switch_list CASE switch_constant_list
+    switch_list CASE switch_literal_list
         scope
     | %empty
     ;
 
-switch_constant_list:
-    switch_constant_list ',' CONSTANT
-    | CONSTANT
+switch_literal_list:
+    switch_literal_list ',' literal
+    | literal
     ;
 
 loop:
@@ -180,36 +179,19 @@ loop:
     ;
 
 decl_var:
-    IDENTIFIER ':' type {
-        p->decl($IDENTIFIER, @IDENTIFIER, $type);
-    }
-
-    | IDENTIFIER ':' type '=' expr {
-        p->decl_expr($IDENTIFIER, @IDENTIFIER, $type, $expr);
-    }
-
-    | IDENTIFIER ':' '[' CONSTANT ']' type {
-        p->decl_array($IDENTIFIER, @IDENTIFIER, $type, $CONSTANT);
-    }
+    IDENTIFIER ':' type                     { p->decl($IDENTIFIER, @IDENTIFIER, $type); }
+    | IDENTIFIER ':' type '=' expr          { p->decl_expr($IDENTIFIER, @IDENTIFIER, $type, $expr); }
+    | IDENTIFIER ':' '[' literal ']' type   { p->decl_array($IDENTIFIER, @IDENTIFIER, $type, $literal); }
     ;
 
 decl_const:
-    CONST IDENTIFIER ':' type '=' expr {
-        p->decl_const($IDENTIFIER, @IDENTIFIER, $type, $expr);
-    }
+    CONST IDENTIFIER ':' type '=' expr      { p->decl_const($IDENTIFIER, @IDENTIFIER, $type, $expr); }
     ;
 
 decl_proc:
-    IDENTIFIER ':' PROC {
-        p->decl_proc_begin($IDENTIFIER, @IDENTIFIER);
-        p->push();
-    }
-    '(' decl_proc_params ')' decl_proc_return
-    {
-        p->decl_proc_end($IDENTIFIER, $decl_proc_return);
-    }
-        scope_no_action
-    { p->pop(); }
+    IDENTIFIER ':' PROC                         { p->decl_proc_begin($IDENTIFIER, @IDENTIFIER); p->push(); }
+    '(' decl_proc_params ')' decl_proc_return   { p->decl_proc_end($IDENTIFIER, $decl_proc_return); }
+        scope_no_action                         { p->pop(); }
     ;
 
 
@@ -244,17 +226,17 @@ type_standard:
     ;
 
 assignment:
-    IDENTIFIER '=' expr
-    | IDENTIFIER AS_ADD expr
-    | IDENTIFIER AS_SUB expr
-    | IDENTIFIER AS_MUL expr
-    | IDENTIFIER AS_DIV expr
-    | IDENTIFIER AS_MOD expr
-    | IDENTIFIER AS_AND expr
-    | IDENTIFIER AS_OR expr
-    | IDENTIFIER AS_XOR expr
-    | IDENTIFIER AS_SHL expr
-    | IDENTIFIER AS_SHR expr
+    IDENTIFIER '=' expr       { p->assign($1, @1, Op_Assign::MOV, $expr); }
+    | IDENTIFIER AS_ADD expr  { p->assign($1, @1, Op_Assign::ADD, $expr); }
+    | IDENTIFIER AS_SUB expr  { p->assign($1, @1, Op_Assign::SUB, $expr); }
+    | IDENTIFIER AS_MUL expr  { p->assign($1, @1, Op_Assign::MUL, $expr); }
+    | IDENTIFIER AS_DIV expr  { p->assign($1, @1, Op_Assign::DIV, $expr); }
+    | IDENTIFIER AS_MOD expr  { p->assign($1, @1, Op_Assign::MOD, $expr); }
+    | IDENTIFIER AS_AND expr  { p->assign($1, @1, Op_Assign::AND, $expr); }
+    | IDENTIFIER AS_OR expr   { p->assign($1, @1, Op_Assign::OR,  $expr); }
+    | IDENTIFIER AS_XOR expr  { p->assign($1, @1, Op_Assign::XOR, $expr); }
+    | IDENTIFIER AS_SHL expr  { p->assign($1, @1, Op_Assign::SHL, $expr); }
+    | IDENTIFIER AS_SHR expr  { p->assign($1, @1, Op_Assign::SHR, $expr); }
     ;
 
 expr:
@@ -264,40 +246,46 @@ expr:
     | proc_call
     | array_access
     | IDENTIFIER { p->id($IDENTIFIER, @IDENTIFIER, $$); }
-    | CONSTANT   { p->constant($CONSTANT, $$); }
-    | TRUE       { p->constant($TRUE, $$); }
-    | FALSE      { p->constant($FALSE, $$); }
+    | literal
+    | TRUE       { p->literal($TRUE,  @TRUE,  Symbol_Type::BOOL, $$); }
+    | FALSE      { p->literal($FALSE, @FALSE, Symbol_Type::BOOL, $$); }
+
+literal:
+    LIT_INT      { p->literal($LIT_INT,   @LIT_INT,   Symbol_Type::INT,   $$); }
+    | LIT_UINT   { p->literal($LIT_UINT,  @LIT_UINT,  Symbol_Type::UINT,  $$); }
+    | LIT_FLOAT  { p->literal($LIT_FLOAT, @LIT_FLOAT, Symbol_Type::FLOAT, $$); }
 
 expr_math:
     '-' expr %prec U_MINUS      { p->unary(Op_Unary::NEG, $expr, @expr, $$); }
     | '!' expr %prec U_LOGICAL  { p->unary(Op_Unary::NOT, $expr, @expr, $$); }
     | '~' expr %prec U_LOGICAL  { p->unary(Op_Unary::INV, $expr, @expr, $$); }
+
     | expr '+' expr { p->binary($1, @1, Op_Binary::ADD, $3, $$); }
     | expr '-' expr { p->binary($1, @1, Op_Binary::SUB, $3, $$); }
     | expr '*' expr { p->binary($1, @1, Op_Binary::MUL, $3, $$); }
     | expr '/' expr { p->binary($1, @1, Op_Binary::DIV, $3, $$); }
     | expr '%' expr { p->binary($1, @1, Op_Binary::MOD, $3, $$); }
     | expr '&' expr { p->binary($1, @1, Op_Binary::AND, $3, $$); }
-    | expr '|' expr { p->binary($1, @1, Op_Binary::OR, $3, $$); }
+    | expr '|' expr { p->binary($1, @1, Op_Binary::OR,  $3, $$); }
     | expr '^' expr { p->binary($1, @1, Op_Binary::XOR, $3, $$); }
     | expr SHL expr { p->binary($1, @1, Op_Binary::SHL, $3, $$); }
     | expr SHR expr { p->binary($1, @1, Op_Binary::SHR, $3, $$); }
     ;
 
 expr_logic:
-    expr '<' expr     { p->binary($1, @1, Op_Binary::SHR, $3, $$); }
-    | expr LEQ expr   { p->binary($1, @1, Op_Binary::LEQ, $3, $$); }
-    | expr EQ expr    { p->binary($1, @1, Op_Binary::EQ, $3, $$); }
-    | expr NEQ expr   { p->binary($1, @1, Op_Binary::NEQ, $3, $$); }
-    | expr GEQ expr   { p->binary($1, @1, Op_Binary::GEQ, $3, $$); }
-    | expr '>' expr   { p->binary($1, @1, Op_Binary::GT, $3, $$); }
+    expr '<' expr     { p->binary($1, @1, Op_Binary::SHR,   $3, $$); }
+    | expr LEQ expr   { p->binary($1, @1, Op_Binary::LEQ,   $3, $$); }
+    | expr EQ expr    { p->binary($1, @1, Op_Binary::EQ,    $3, $$); }
+    | expr NEQ expr   { p->binary($1, @1, Op_Binary::NEQ,   $3, $$); }
+    | expr GEQ expr   { p->binary($1, @1, Op_Binary::GEQ,   $3, $$); }
+    | expr '>' expr   { p->binary($1, @1, Op_Binary::GT,    $3, $$); }
     | expr L_AND expr { p->binary($1, @1, Op_Binary::L_AND, $3, $$); }
-    | expr L_OR expr  { p->binary($1, @1, Op_Binary::L_OR, $3, $$); }
+    | expr L_OR expr  { p->binary($1, @1, Op_Binary::L_OR,  $3, $$); }
     ;
 
 proc_call:
     // Optional parameters
-    IDENTIFIER '(' proc_call_params ')'
+    IDENTIFIER { p->pcall_begin(); } '(' proc_call_params ')' { p->pcall($IDENTIFIER, @IDENTIFIER, $$); }
 
 // param *
 // Had to be split to allow left recursive grammar without the (, one_param) case
@@ -307,8 +295,8 @@ proc_call_params:
     ;
 
 comma_separated_exprs:
-    comma_separated_exprs ',' expr
-    | expr
+    comma_separated_exprs ',' expr { p->pcall_add($expr); }
+    | expr { p->pcall_add($expr); }
     ;
 
 array_access:

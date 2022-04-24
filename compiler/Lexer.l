@@ -25,8 +25,8 @@ id_postfix {id_prefix}|[0-9]
 identifier {id_prefix}{id_postfix}*
 
 /* Constants */
-v_int   [-+]?[0-9]+
-v_float {v_int}\.[0-9]+
+lit_int   [-+]?[0-9]+
+lit_float {lit_int}\.[0-9]+
 
 /* Operators */
 operator [<>+\-*/&|=^!~]
@@ -59,11 +59,12 @@ float    return FLOAT;
 bool     return BOOL;
 
 {identifier}    yylval->lexeme = strdup(yytext); return IDENTIFIER;
-{v_int}         yylval->value  = atoi(yytext);   return CONSTANT;
-{v_float} {
+{lit_int}       yylval->value  = atoi(yytext);   return LIT_INT;
+{lit_int}u      yylval->value  = atoi(yytext);   return LIT_UINT;
+{lit_float} {
     float v = atof(yytext);
-    yylval->value = *(unsigned long long*)(&v);
-    return CONSTANT;
+    yylval->value = *(uint64_t*)(&v);
+    return LIT_FLOAT;
 }
 
 "+="    return AS_ADD;

@@ -8,26 +8,27 @@ namespace s22
 {
 	struct Expr;
 
-	Result<Symbol_Type>
-	expr_evaluate(Expr &expr, Symbol_Table *scope);
+	Error
+	expr_evaluate(Expr &expr, Scope *scope);
 
-	struct Constant
+	struct Literal
 	{
 		// 64 bits for all constants
+		Symbol_Type::BASE base;
 		uint64_t value;
 	};
 
 	struct Identifier
 	{
 		// Identifier in symbol table
-		const char *id;
+		char id[128];
 	};
 
 	struct Op_Assign
 	{
 		enum KIND
 		{
-			NOP, // A = B
+			MOV, // A = B
 
 			ADD, // A += B
 			SUB, // A -= B
@@ -75,7 +76,7 @@ namespace s22
 			GEQ, // A >= B
 
 			L_AND,  // A && B
-			L_OR, 	// A || B
+			L_OR,    // A || B
 		};
 
 		KIND kind;
@@ -99,48 +100,54 @@ namespace s22
 		Expr *right;
 	};
 
+	struct Proc_Call
+	{
+		char id[128];
+		Buf<Expr> params;
+	};
+
 	struct Expr
 	{
 		enum KIND
 		{
-			CONSTANT,
+			LITERAL,
 			IDENTIFIER,
 			OP_ASSIGN,
 			OP_BINARY,
 			OP_UNARY,
-			// TODO: PROCEDURE CALLS
-			// TODO: ARRAY ACCESS
+			PROC_CALL,
 		};
 
 		KIND kind;
 		union
 		{
-			Constant as_const;
+			Literal as_literal;
 			Identifier as_id;
 			Op_Assign as_assign;
 			Op_Binary as_binary;
 			Op_Unary as_unary;
-
-			void* as_error;
+			Proc_Call as_proc_call;
 		};
 
 		Symbol_Type type;
+		Location loc;
 	};
 
-	constexpr inline Expr EXPR_ERROR = { .type = SYMTYPE_ERROR };
-
-	Expr
-	constant_new(uint64_t value);
+	Result <Expr>
+	literal_new(Scope *scope, uint64_t value, Location loc, Symbol_Type::BASE base);
 
 	Result<Expr>
-	identifier_new(Symbol_Table *scope, const char *id);
+	identifier_new(Scope *scope, const char *id, Location loc);
 
 	Result<Expr>
-	op_assign_new(Symbol_Table *scope, const char *id, Op_Assign::KIND kind, Expr &right);
+	op_assign_new(Scope *scope, const char *id, Location loc, Expr &right, Op_Assign::KIND kind);
 
 	Result<Expr>
-	op_binary_new(Symbol_Table *scope, Expr &left, Op_Binary::KIND kind, Expr &right);
+	op_binary_new(Scope *scope, Expr &left, Location loc, Expr &right, Op_Binary::KIND kind);
 
 	Result<Expr>
-	op_unary_new(Symbol_Table *scope, Op_Unary::KIND kind, Expr &right);
+	op_unary_new(Scope *scope, Expr &right, Location loc, Op_Unary::KIND kind);
+
+	Result<Expr>
+	proc_call_new(Scope *scope, const char *id, Location loc, Buf<Expr> params);
 }

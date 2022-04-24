@@ -9,26 +9,6 @@
 
 namespace s22
 {
-	struct Location;
-}
-
-namespace s22
-{
-	struct Location
-	{
-		int first_line, first_column;
-		int last_line, last_column;
-	};
-
-	void
-	location_reduce(Location &current, Location *rhs, size_t N);
-
-	void
-	location_update(Location *loc);
-
-	void
-	location_print(FILE *out, const Location *loc);
-
 	struct Symbol_Type;
 	struct Procedure
 	{
@@ -61,7 +41,6 @@ namespace s22
 			BOOL,
 
 			// INTERNAL
-			ANY,
 			ERROR,
 		};
 
@@ -73,12 +52,6 @@ namespace s22
 		inline bool
 		operator==(const Symbol_Type &other) const
 		{
-			if (base == ERROR || other.base == ERROR)
-				return false;
-
-			if (base == ANY || other.base == ANY)
-				return true;
-
 			if (base != other.base)
 				return false;
 
@@ -102,9 +75,10 @@ namespace s22
 		operator!=(const Symbol_Type &other) const { return !operator==(other); }
 	};
 
-	constexpr inline Symbol_Type SYMTYPE_ERROR = { .base = Symbol_Type::ERROR };
-	constexpr inline Symbol_Type SYMTYPE_INT   = { .base = Symbol_Type::INT };
-	constexpr inline Symbol_Type SYMTYPE_UINT  = { .base = Symbol_Type::UINT };
+	constexpr Symbol_Type SYMTYPE_ERROR = { .base = Symbol_Type::ERROR };
+	constexpr Symbol_Type SYMTYPE_INT   = { .base = Symbol_Type::INT };
+	constexpr Symbol_Type SYMTYPE_UINT  = { .base = Symbol_Type::UINT };
+	constexpr Symbol_Type SYMTYPE_VOID  = { .base = Symbol_Type::VOID };
 
 	void
 	symtype_print(FILE *out, const Symbol_Type &type);
@@ -120,32 +94,38 @@ namespace s22
 		bool is_used;
 	};
 
-	struct Symbol_Table
+	struct Scope
 	{
-		using Entry = std::variant<Symbol, Symbol_Table>;
+		using Entry = std::variant<Symbol, Scope>;
 		std::vector<Entry> table;
-		Symbol_Table *parent_scope;
+
+		Scope *parent_scope;
 		size_t idx_in_parent_table;
+
+		Optional<Symbol_Type> procedure;
 	};
 
 	Result<Symbol *>
-	symtab_add_decl(Symbol_Table *self, const Symbol &symbol);
+	scope_add_decl(Scope *self, const Symbol &symbol);
 
 	struct Expr;
 	Result<Symbol *>
-	symtab_add_decl(Symbol_Table *self, const Symbol &symbol, Expr &expr);
+	scope_add_decl(Scope *self, const Symbol &symbol, Expr &expr);
 
-	Symbol_Table *
-	symtab_push_scope(Symbol_Table *&self);
+	Scope *
+	scope_push(Scope *&self);
 
-	Symbol_Table *
-	symtab_pop_scope(Symbol_Table *&self);
+	Error
+	scope_return_is_valid(Scope *self, Symbol_Type type);
+
+	Scope *
+	scope_pop(Scope *&self);
 
 	Symbol *
-	symtab_get_id(Symbol_Table *self, const char *id);
+	scope_get_id(Scope *self, const char *id);
 
-	Procedure *
-	symtab_make_procedure(Symbol_Table *self, Symbol_Type return_type);
+	Procedure
+	scope_make_proc(Scope *self, Symbol_Type return_type);
 }
 
 template<>

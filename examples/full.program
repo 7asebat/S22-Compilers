@@ -1,10 +1,27 @@
-f: proc(x: int, y: int, z: int)
+x: int = 4;
+// sub sp, 1
+// mov r0, 4
+// st -1(sp), r0
+
+y: float;
+
+x += 5;
+
+if x < 8
 {
-    x += y & z;
+    y = 1.0;
 }
+else if x == 9
+{
+    y = 2.0;
 
-f2: proc() -> float { return 2.0; }
-
-arr: [4]int;
-
-f(1, arr[2], 3, f2());
+    my_proc: proc(z: int)
+    {
+        z += 3;
+    }
+    my_proc(1);
+}
+else
+{
+    y = 3.0;
+}

@@ -28,6 +28,7 @@ set(COMPILER_SOURCE_FILES
 	compiler/src/compiler/Expr.cpp
 	compiler/src/compiler/Symbol.cpp
 	compiler/src/compiler/Parser.cpp
+	compiler/src/compiler/main.cpp
 )
 
 set(COMPILER_HEADER_FILES
@@ -54,10 +55,4 @@ add_custom_target(run
 add_custom_target(debug
 	COMMAND compiler examples/full.program DEBUG
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_executable(compiler-test
-	${COMPILER_HEADER_FILES}
-	${COMPILER_SOURCE_FILES}
-	compiler/src/compiler/main.cpp
 )

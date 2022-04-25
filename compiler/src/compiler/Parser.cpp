@@ -9,6 +9,31 @@ extern FILE *yyin;
 
 namespace s22
 {
+	constexpr const char *
+	errlvl_to_str(Error_Level lvl)
+	{
+		switch (lvl)
+		{
+		case Error_Level::INFO:    return "INFO";
+		case Error_Level::ERROR:   return "ERROR";
+		case Error_Level::WARNING: return "WARNING";
+		default:                   return "UNREACHABLE";
+		}
+	}
+
+	void
+	parse_error(const Error &err, Error_Level lvl)
+	{
+		auto msg = std::format("{}: {}", lvl, err);
+		yyerror(&err.loc, nullptr, msg.c_str());
+	}
+
+	void
+	Parser::init()
+	{
+		this->current_scope = &this->global;
+	}
+
 	void
 	Parser::push()
 	{
@@ -21,243 +46,177 @@ namespace s22
 		// TODO: Assert returns
 		scope_pop(this->current_scope);
 
-		if (this->current_scope == &this->global)
-		{
-			Location loc = {};
-			yyerror(&loc, nullptr, "Complete!");
-		}
+		if (this->current_scope == nullptr)
+			parse_error(Error{"Complete!"}, Error_Level::INFO);
 	}
 
 	void
 	Parser::new_stmt()
 	{
-		this->caught_error = false;
-	}
-
-	inline static void
-	parser_handle_error(Parser *self, const Error& err)
-	{
-		auto msg = std::format("ERROR: {}", err);
-		yyerror(&err.loc, self, msg.c_str());
-
-		if (self->caught_error == false)
-		{
-			// NOTE: This logs a single error per statement
-			self->caught_error = true;
-		}
-	}
-
-	inline static void
-	parser_handle_error(Parser *self, const Error& err, Expr &dst)
-	{
-		dst.type = SYMTYPE_ERROR;
-		parser_handle_error(self, err);
 	}
 
 	void
-	Parser::return_value(Location loc)
+	Parser::return_value(Source_Location loc)
 	{
 		auto err = scope_return_is_valid(this->current_scope, SYMTYPE_VOID);
 		if (err)
 		{
-			parser_handle_error(this, Error{loc, err});
+			parse_error(Error{ loc, err });
 		}
 	}
 
 	void
-	Parser::return_value(Location loc, Expr &expr)
+	Parser::return_value(Source_Location loc, Expr &expr)
 	{
 		auto err = scope_return_is_valid(this->current_scope, expr.type);
-		if (err)
+		if (err && expr.kind != Expr::ERROR) // Limit error propagation
 		{
-			parser_handle_error(this, Error{loc, err});
+			parse_error(Error{ expr.loc, err });
 		}
 	}
 
 	void
-	Parser::id(const char *id, Location loc, Expr &dst)
+	Parser::literal(uint64_t value, Source_Location loc, Symbol_Type::BASE base, Expr &dst)
 	{
-		auto [expr, err] = identifier_new(this->current_scope, id, loc);
-		if (err)
-		{
-			parser_handle_error(this, err, dst);
-		}
-		else
-		{
-			dst = expr;
-		}
+		dst = make_literal(nullptr, value, loc, base);
 	}
 
 	void
-	Parser::literal(uint64_t value, Location loc, Symbol_Type::BASE base, Expr &dst)
+	Parser::id(const char *id, Source_Location loc, Expr &dst)
 	{
-		auto [expr, _] = literal_new(nullptr, value, loc, base);
-		dst = expr;
+		dst = make_identifier(this->current_scope, id, loc);
+
+		if (dst.kind == Expr::ERROR)
+			parse_error(dst.as_error);
 	}
 
 	void
-	Parser::assign(const char *id, Location loc, Op_Assign::KIND op, Expr &right)
+	Parser::assign(const char *id, Source_Location loc, Op_Assign::KIND op, Expr &right)
 	{
-		auto [expr, err] = op_assign_new(this->current_scope, id, loc, right, op);
-		if (err)
-		{
-			parser_handle_error(this, err);
-		}
+		auto dst = make_op_assign(this->current_scope, id, loc, right, op);
+
+		if (dst.kind == Expr::ERROR && right.kind != Expr::ERROR)
+			parse_error(dst.as_error);
 	}
 
 	void
-	Parser::binary(Expr &left, Location loc, Op_Binary::KIND op, Expr &right, Expr &dst)
+	Parser::array_assign(Expr &left, Source_Location loc, Op_Assign::KIND op, Expr &right)
 	{
-		auto [expr, err] = op_binary_new(this->current_scope, left, loc, right, op);
-		if (err)
-		{
-			parser_handle_error(this, err, dst);
-		}
-		else
-		{
-			dst = expr;
-		}
+		auto dst = make_op_array_assign(this->current_scope, left, loc, right, op);
+
+		if (dst.kind == Expr::ERROR && right.kind != Expr::ERROR)
+			parse_error(dst.as_error);
 	}
 
 	void
-	Parser::unary(Op_Unary::KIND op, Expr &right, Location loc, Expr &dst)
+	Parser::binary(Expr &left, Source_Location loc, Op_Binary::KIND op, Expr &right, Expr &dst)
 	{
-		auto [expr, err] = op_unary_new(this->current_scope, right, loc, op);
-		if (err)
-		{
-			parser_handle_error(this, err, dst);
-		}
-		else
-		{
-			dst = expr;
-		}
+		dst = make_op_binary(this->current_scope, left, loc, right, op);
+
+		if (dst.kind == Expr::ERROR && left.kind != Expr::ERROR && right.kind != Expr::ERROR)
+			parse_error(dst.as_error);
 	}
 
 	void
-	Parser::array(const char *id, Location loc, Expr &expr, Expr &dst)
+	Parser::unary(Op_Unary::KIND op, Expr &right, Source_Location loc, Expr &dst)
 	{
-		auto sym = scope_get_id(this->current_scope, id);
+		dst = make_op_unary(this->current_scope, right, loc, op);
 
-		// undefined
-		if (sym == nullptr)
-		{
-			parser_handle_error(this, Error{loc, "undeclared identifier"}, dst);
-			return;
-		}
-		sym->is_used = true;
+		if (dst.kind == Expr::ERROR && right.kind != Expr::ERROR)
+			parse_error(dst.as_error);
+	}
 
-		// error index
-		if (auto err = expr_evaluate(expr, this->current_scope))
-		{
-			parser_handle_error(this, err, dst);
-			return;
-		}
+	void
+	Parser::array(const char *id, Source_Location loc, Expr &expr, Expr &dst)
+	{
+		dst = make_array_access(this->current_scope, id, loc, expr);
 
-		// invalid index
-		else if (expr.type != SYMTYPE_INT && expr.type != SYMTYPE_UINT)
-		{
-			parser_handle_error(this, Error{expr.loc, "invalid index"}, dst);
-			return;
-		}
-
-		// not array
-		if (sym->type.array == false)
-		{
-			parser_handle_error(this, Error{loc, "type cannot be indexed"}, dst);
-			return;
-		}
-
-		auto type = sym->type;
-
-		// TODO: VERIFY THIS
-		type.array = nullptr;
-		dst = { .kind = Expr::LITERAL, .type = type, .loc = loc };
+		if (dst.kind == Expr::ERROR && expr.kind != Expr::ERROR)
+			parse_error(dst.as_error);
 	}
 
 	void
 	Parser::pcall_begin()
 	{
-		this->list_stack.emplace();
+		this->proc_call_arguments_stack.emplace();
 	}
 
 	void
 	Parser::pcall_add(Expr &expr)
 	{
-		auto &list = this->list_stack.top();
+		auto &list = this->proc_call_arguments_stack.top();
 		list.push_back(expr);
 	}
 
 	void
-	Parser::pcall(const char *id, Location loc, Expr &dst)
+	Parser::pcall(const char *id, Source_Location loc, Expr &dst)
 	{
-		auto &list = this->list_stack.top();
-		auto data = list.data();
-		auto count = list.size();
+		auto &list = this->proc_call_arguments_stack.top();
+		auto params = Buf<Expr>{list.data(), list.size()};
 
-		auto [expr, err] = proc_call_new(this->current_scope, id, loc, Buf<Expr>{data, count});
-		if (err)
-		{
-			parser_handle_error(this, err, dst);
-		}
-		else
-		{
-			dst = expr;
-		}
+		dst = make_proc_call(this->current_scope, id, loc, params);
 
-		this->list_stack.pop();
+		bool unique_error = true;
+		for (const auto &expr : params)
+			unique_error &= expr.kind != Expr::ERROR;
+
+		if (dst.kind == Expr::ERROR && unique_error)
+			parse_error(dst.as_error);
+
+		this->proc_call_arguments_stack.pop();
 	}
 
 	void
-	Parser::decl(const char *id, Location loc, Symbol_Type type)
+	Parser::decl(const char *id, Source_Location loc, Symbol_Type type)
 	{
 		Symbol sym = { .id = id, .type = type, .defined_at = loc };
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym);
 		if (err)
 		{
-			parser_handle_error(this, err);
+			parse_error(err);
 		}
 	}
 
 	void
-	Parser::decl_expr(const char *id, Location loc, Symbol_Type type, Expr &expr)
+	Parser::decl_expr(const char *id, Source_Location loc, Symbol_Type type, Expr &expr)
 	{
 		Symbol sym = { .id = id, .type = type, .defined_at = loc };
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym, expr);
-		if (err)
+		if (err && expr.kind != Expr::ERROR)
 		{
-			parser_handle_error(this, err);
+			parse_error(err);
 		}
 	}
 
 	void
-	Parser::decl_array(const char *id, Location loc, Symbol_Type type, Expr &expr)
+	Parser::decl_array(const char *id, Source_Location loc, Symbol_Type type, Expr &index)
 	{
 		Symbol sym = { .id = id, .type = type, .defined_at = loc };
-		sym.type.array = expr.as_literal.value;
+		sym.type.array = index.as_literal.value;
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym);
-		if (err)
+		if (err && index.kind != Expr::ERROR)
 		{
-			parser_handle_error(this, err);
+			parse_error(err);
 		}
 	}
 
 	void
-	Parser::decl_const(const char *id, Location loc, Symbol_Type type, Expr &expr)
+	Parser::decl_const(const char *id, Source_Location loc, Symbol_Type type, Expr &expr)
 	{
 		Symbol sym = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym, expr);
-		if (err)
+		if (err && expr.kind != Expr::ERROR)
 		{
-			parser_handle_error(this, err);
+			parse_error(err);
 		}
 	}
 
 	void
-	Parser::decl_proc_begin(const char *id, Location loc)
+	Parser::decl_proc_begin(const char *id, Source_Location loc)
 	{
 		Symbol sym = {
 			.id = id,
@@ -268,7 +227,7 @@ namespace s22
 		auto [_, err] = scope_add_decl(this->current_scope, sym);
 		if (err)
 		{
-			parser_handle_error(this, err);
+			parse_error(err);
 		}
 	}
 
@@ -277,19 +236,73 @@ namespace s22
 	{
 		auto sym = scope_get_id(this->current_scope->parent_scope, id);
 		if (sym == nullptr)
-		{
-			Location loc = {};
-			yyerror(&loc, nullptr, "UNREACHABLE");
-			return;
-		}
+			return parse_error(Error{ "UNREACHABLE" });
 
 		sym->type.procedure = scope_make_proc(this->current_scope, return_type);
 		this->current_scope->procedure = return_type;
 	}
+
+	void
+	Parser::switch_begin(const Expr &expr)
+	{
+		if (symtype_is_valid_index(expr.type) == false)
+			return parse_error(Error{ expr.loc, "invalid type" });
+
+		// Start building the partitioned set
+		this->switch_current_partition = 0;
+	}
+
+	void
+	Parser::switch_end()
+	{
+		// Stop building the partitioned set
+		this->switch_cases.clear();
+	}
+
+	void
+	Parser::switch_case_begin()
+	{
+		// Start building a partition
+	}
+
+	void
+	Parser::switch_case_end()
+	{
+		// End the partition
+		this->switch_current_partition++;
+	}
+
+	void
+	Parser::switch_case_add(Expr &expr)
+	{
+		if (expr.kind != Expr::LITERAL || symtype_is_valid_index(expr.type) == false)
+		{
+			if (expr.kind != Expr::ERROR)
+				parse_error(Error{ expr.loc, "invalid case" });
+
+			return;
+		}
+
+		// Insert into the partition
+		Switch_Case swc = { .value = expr.as_literal.value, .partition = this->switch_current_partition };
+		if (this->switch_cases.contains(swc))
+			return parse_error(Error{ expr.loc, "duplicate case" });
+
+		this->switch_cases.insert(swc);
+	}
+
+	void
+	Parser::switch_default(Source_Location loc)
+	{
+		if (this->switch_cases.contains(SWC_DEFAULT))
+			return parse_error(Error{ loc, "duplicate default" });
+
+		this->switch_cases.insert(SWC_DEFAULT);
+	}
 }
 
 void
-yyerror(const s22::Location *location, s22::Parser *p, const char *message)
+yyerror(const s22::Source_Location *location, s22::Parser *p, const char *message)
 {
 	// Save offset to continue read
 	auto offset_before = ftell(yyin);
@@ -323,3 +336,13 @@ yyerror(const s22::Location *location, s22::Parser *p, const char *message)
 	}
 	fprintf(stderr, "%s\n", buf);
 }
+
+template <>
+struct std::formatter<s22::Error_Level> : std::formatter<std::string>
+{
+	auto
+	format(s22::Error_Level lvl, format_context &ctx)
+	{
+		return format_to(ctx.out(), "{}", s22::errlvl_to_str(lvl));
+	}
+};

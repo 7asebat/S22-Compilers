@@ -14,7 +14,7 @@ extern FILE *yyin;
 namespace s22
 {
 	void
-	location_reduce(Location &current, Location *rhs, size_t N)
+	location_reduce(Source_Location &current, Source_Location *rhs, size_t N)
 	{
 		if (N != 0)
 		{
@@ -31,7 +31,7 @@ namespace s22
 	}
 
 	void
-	location_update(Location *loc)
+	location_update(Source_Location *loc)
 	{
 		static int column = 1;
 
@@ -55,10 +55,27 @@ namespace s22
 	}
 
 	void
-	location_print(FILE *out, const Location *const loc)
+	location_print(FILE *out, const Source_Location *const loc)
 	{
 		auto str = std::format("{}", *loc);
 		fprintf(out, str.data());
+	}
+
+	bool
+	symtype_allows_arithmetic(const Symbol_Type &type)
+	{
+		// Arrays are different from array access Expr{arr} != Expr{arr[i]}
+		return (type.array || type.procedure) == false;
+	}
+
+	bool
+	symtype_is_valid_index(const Symbol_Type &type)
+	{
+		constexpr Symbol_Type SYMTYPE_INT  = { .base = Symbol_Type::INT };
+		constexpr Symbol_Type SYMTYPE_UINT = { .base = Symbol_Type::UINT };
+		constexpr Symbol_Type SYMTYPE_BOOL = { .base = Symbol_Type::BOOL };
+
+		return type == SYMTYPE_INT || type == SYMTYPE_UINT || type == SYMTYPE_BOOL;
 	}
 
 	void
@@ -90,7 +107,7 @@ namespace s22
 			{
 				auto &dup = std::get<Symbol>(entry);
 				if (dup.id == symbol.id)
-					return Error{symbol.defined_at, "Duplicate identifier at {}", dup.defined_at};
+					return Error{symbol.defined_at, "duplicate identifier at {}", dup.defined_at};
 			}
 		}
 
@@ -102,9 +119,8 @@ namespace s22
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol, Expr &expr)
 	{
-		auto err = expr_evaluate(expr, self);
-		if (err)
-			return err;
+		if (expr.kind == Expr::ERROR)
+			return expr.as_error;
 
 		if (symbol.type != expr.type)
 			return Error{expr.loc, "type mismatch"};
@@ -134,12 +150,12 @@ namespace s22
 	scope_return_is_valid(Scope *self, Symbol_Type type)
 	{
 		// Trace scope upwards until a function is found
-		for (auto current_scope = self; current_scope != nullptr; current_scope = current_scope->parent_scope)
+		for (auto scope = self; scope != nullptr; scope = scope->parent_scope)
 		{
-			if (self->procedure == false)
+			if (scope->procedure == false)
 				continue;
 
-			if (*self->procedure != type)
+			if (*scope->procedure != type)
 			{
 				return Error{"type mismatch"};
 			}
@@ -160,10 +176,9 @@ namespace s22
 			if (std::holds_alternative<Symbol>(entry))
 			{
 				auto &sym = std::get<Symbol>(entry);
+
 				if (sym.is_used == false)
-				{
-					yyerror(&sym.defined_at, nullptr, "WARNING: Unused identifier");
-				}
+					parse_error(Error{sym.defined_at, "unused identifier"}, Error_Level::WARNING);
 			}
 		}
 		auto inner = self;
@@ -174,12 +189,12 @@ namespace s22
 	Symbol *
 	scope_get_id(Scope *self, const char *id)
 	{
-		size_t current_scope_idx_in_parent = self->table.size();
-		for (auto current_scope = self; current_scope != nullptr;)
+		size_t scope_idx_in_parent = self->table.size();
+		for (auto scope = self; scope != nullptr;)
 		{
-			for (size_t i = 0; i < current_scope_idx_in_parent; i++)
+			for (size_t i = 0; i < scope_idx_in_parent; i++)
 			{
-				auto &entry = current_scope->table[i];
+				auto &entry = scope->table[i];
 				if (std::holds_alternative<Symbol>(entry))
 				{
 					auto &sym = std::get<Symbol>(entry);
@@ -189,8 +204,8 @@ namespace s22
 				}
 			}
 
-			current_scope_idx_in_parent = current_scope->idx_in_parent_table;
-			current_scope = current_scope->parent_scope;
+			scope_idx_in_parent = scope->idx_in_parent_table;
+			scope = scope->parent_scope;
 		}
 		return nullptr;
 	}

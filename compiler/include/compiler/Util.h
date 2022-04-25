@@ -39,6 +39,15 @@ namespace s22
 	}
 
 	template <typename T>
+	inline static T *
+	copy(const T& other)
+	{
+		auto ptr = alloc<T>();
+		*ptr = T{other};
+		return ptr;
+	}
+
+	template <typename T>
 	inline static void
 	destruct(T *&ptr)
 	{
@@ -49,13 +58,13 @@ namespace s22
 		ptr = nullptr;
 	}
 
-	struct Location
+	struct Source_Location
 	{
 		int first_line, first_column;
 		int last_line, last_column;
 
 		inline bool
-		operator ==(const Location &other) const
+		operator ==(const Source_Location &other) const
 		{
 			return first_line   == other.first_line &&
 				   first_column == other.first_column &&
@@ -64,94 +73,17 @@ namespace s22
 		}
 
 		inline bool
-		operator !=(const Location &other) const { return !operator==(other); }
+		operator !=(const Source_Location &other) const { return !operator==(other); }
 	};
 
 	void
-	location_reduce(Location &current, Location *rhs, size_t N);
+	location_reduce(Source_Location &current, Source_Location *rhs, size_t N);
 
 	void
-	location_update(Location *loc);
+	location_update(Source_Location *loc);
 
 	void
-	location_print(FILE *out, const Location *loc);
-
-	struct Error
-	{
-		std::string msg;
-		Location loc;
-
-		// creates a new empty error (not an error)
-		Error() : msg({}), loc({}) {}
-
-		// creates a new error with the given error message
-		template<typename... TArgs>
-		Error(const char *fmt, TArgs &&...args) : msg(std::format(fmt, std::forward<TArgs>(args)...)), loc({}) {}
-
-		template<typename... TArgs>
-		Error(Location loc, const char *fmt, TArgs &&...args) : msg(std::format(fmt, std::forward<TArgs>(args)...)), loc(loc) {}
-
-		Error(Location loc, const Error &other) : msg(other.msg), loc(loc) {}
-
-		Error(const Error &other) : msg(other.msg), loc(other.loc) {}
-
-		Error(Error &&other) : msg(std::move(other.msg)), loc(std::move(other.loc)) { other.msg = {}; }
-
-		inline Error &
-		operator=(const Error &other)
-		{
-			msg.clear();
-			msg = other.msg;
-			loc = other.loc;
-			return *this;
-		}
-
-		inline Error &
-		operator=(Error &&other)
-		{
-			msg.clear();
-			msg = other.msg;
-			loc = other.loc;
-			other.msg = {};
-			return *this;
-		}
-
-		inline explicit operator bool() const { return msg.length() != 0; }
-
-		inline bool
-		operator==(bool v) const { return (msg.length() != 0) == v; }
-
-		inline bool
-		operator!=(bool v) const { return !operator==(v); }
-	};
-
-	template<typename T, typename E = Error>
-	struct Result
-	{
-		static_assert(!std::is_same_v<Error, T>, "Error can't be of the same type as value");
-
-		T val;
-		E err;
-
-		// creates a result instance from an error
-		Result(E e) : err(e), val(T{}) {}
-
-		// creates a result instance from a value
-		template<typename... TArgs>
-		Result(TArgs &&...args) : val(std::forward<TArgs>(args)...), err(E{}) {}
-
-		Result(const Result &) = delete;
-
-		Result(Result &&) = default;
-
-		Result &
-		operator=(const Result &) = delete;
-
-		Result &
-		operator=(Result &&) = default;
-
-		~Result() = default;
-	};
+	location_print(FILE *out, const Source_Location *loc);
 
 	template<typename T>
 	struct Buf
@@ -214,6 +146,70 @@ namespace s22
 	}
 
 	using Str = Buf<char>;
+
+	struct Error
+	{
+		Str msg;
+		Source_Location loc;
+
+		// creates a new error with the given error message
+		template<typename... TArgs>
+		Error(const char *fmt, TArgs &&...args) : msg({}), loc({})
+		{
+			msg = std::format(fmt, std::forward<TArgs>(args)...).c_str();
+		}
+
+		template<typename... TArgs>
+		Error(Source_Location loc, const char *fmt, TArgs &&...args) : msg({}), loc(loc)
+		{
+			msg = std::format(fmt, std::forward<TArgs>(args)...).c_str();
+		}
+
+		Error(Source_Location loc, const Error &other) : msg(other.msg), loc(loc) {}
+
+		Error() = default;
+		Error(const Error &other) = default;
+		Error(Error &&other) = default;
+		Error& operator=(const Error &other) = default;
+		Error& operator=(Error &&other) = default;
+
+		inline explicit
+		operator bool() const { return msg.count != 0; }
+
+		inline bool
+		operator==(bool v) const { return bool(*this) == v; }
+
+		inline bool
+		operator!=(bool v) const { return !operator==(v); }
+	};
+
+	template<typename T, typename E = Error>
+	struct Result
+	{
+		static_assert(!std::is_same_v<Error, T>, "Error can't be of the same type as value");
+
+		T val;
+		E err;
+
+		// creates a result instance from an error
+		Result(E e) : err(e), val(T{}) {}
+
+		// creates a result instance from a value
+		template<typename... TArgs>
+		Result(TArgs &&...args) : val(std::forward<TArgs>(args)...), err(E{}) {}
+
+		Result(const Result &) = delete;
+
+		Result(Result &&) = default;
+
+		Result &
+		operator=(const Result &) = delete;
+
+		Result &
+		operator=(Result &&) = default;
+
+		~Result() = default;
+	};
 
 	template <typename T>
 	struct Optional
@@ -305,6 +301,16 @@ struct std::formatter<s22::Buf<T>> : std::formatter<std::string>
 			format_to(ctx.out(), "{}", buf[i]);
 		}
 		return ctx.out();
+	}
+};
+
+template <>
+struct std::formatter<s22::Str> : std::formatter<std::string>
+{
+	auto
+	format(const s22::Str &str, format_context &ctx)
+	{
+		return format_to(ctx.out(), "{}", str.data);
 	}
 };
 

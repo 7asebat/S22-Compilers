@@ -8,9 +8,6 @@ namespace s22
 {
 	struct Expr;
 
-	Error
-	expr_evaluate(Expr &expr, Scope *scope);
-
 	struct Literal
 	{
 		// 64 bits for all constants
@@ -20,8 +17,13 @@ namespace s22
 
 	struct Identifier
 	{
-		// Identifier in symbol table
-		char id[128];
+		Symbol *sym;
+	};
+
+	struct Array_Access
+	{
+		Symbol *sym;
+		Expr *index;
 	};
 
 	struct Op_Assign
@@ -44,7 +46,7 @@ namespace s22
 		};
 
 		KIND kind;
-		Symbol *left;
+		Expr *left;
 		Expr *right;
 	};
 
@@ -52,7 +54,6 @@ namespace s22
 	{
 		enum KIND
 		{
-			// Mathematical
 			ADD, // A + B
 			SUB, // A - B
 			MUL, // A * B
@@ -65,7 +66,7 @@ namespace s22
 			SHL, // A << B
 			SHR, // A >> B
 
-			// Logical
+			LOGICAL,
 			LT,  // A < B
 			LEQ, // A <= B
 
@@ -91,9 +92,11 @@ namespace s22
 			// Mathematical
 			NEG, // -A
 
+			// Binary
+			INV, // ~A
+
 			// Logical
 			NOT, // !A
-			INV, // ~A
 		};
 
 		KIND kind;
@@ -102,7 +105,7 @@ namespace s22
 
 	struct Proc_Call
 	{
-		char id[128];
+		Symbol *sym;
 		Buf<Expr> params;
 	};
 
@@ -112,42 +115,54 @@ namespace s22
 		{
 			LITERAL,
 			IDENTIFIER,
+			ARRAY_ACCESS,
 			OP_ASSIGN,
 			OP_BINARY,
 			OP_UNARY,
 			PROC_CALL,
+
+			// ERROR PROPAGATION
+			ERROR,
 		};
 
 		KIND kind;
+		Symbol_Type type;
+		Source_Location loc;
+
 		union
 		{
 			Literal as_literal;
 			Identifier as_id;
+			Array_Access as_array;
 			Op_Assign as_assign;
 			Op_Binary as_binary;
 			Op_Unary as_unary;
 			Proc_Call as_proc_call;
+			Error as_error;
 		};
-
-		Symbol_Type type;
-		Location loc;
 	};
 
-	Result <Expr>
-	literal_new(Scope *scope, uint64_t value, Location loc, Symbol_Type::BASE base);
+	Expr
+	make_literal(Scope *scope, uint64_t value, Source_Location loc, Symbol_Type::BASE base);
 
-	Result<Expr>
-	identifier_new(Scope *scope, const char *id, Location loc);
+	Expr
+	make_identifier(Scope *scope, const char *id, Source_Location loc);
 
-	Result<Expr>
-	op_assign_new(Scope *scope, const char *id, Location loc, Expr &right, Op_Assign::KIND kind);
+	Expr
+	make_op_assign(Scope *scope, const char *id, Source_Location loc, Expr &right, Op_Assign::KIND kind);
 
-	Result<Expr>
-	op_binary_new(Scope *scope, Expr &left, Location loc, Expr &right, Op_Binary::KIND kind);
+	Expr
+	make_op_array_assign(Scope *scope, Expr &left, Source_Location loc, Expr &right, Op_Assign::KIND kind);
 
-	Result<Expr>
-	op_unary_new(Scope *scope, Expr &right, Location loc, Op_Unary::KIND kind);
+	Expr
+	make_op_binary(Scope *scope, Expr &left, Source_Location loc, Expr &right, Op_Binary::KIND kind);
 
-	Result<Expr>
-	proc_call_new(Scope *scope, const char *id, Location loc, Buf<Expr> params);
+	Expr
+	make_op_unary(Scope *scope, Expr &right, Source_Location loc, Op_Unary::KIND kind);
+
+	Expr
+	make_array_access(Scope *scope, const char *id, Source_Location loc, Expr &expr);
+
+	Expr
+	make_proc_call(Scope *scope, const char *id, Source_Location loc, Buf<Expr> params);
 }

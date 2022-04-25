@@ -10,11 +10,11 @@
 }
 %define api.value.type {Parser::YY_Symbol}
 
-%parse-param {Parser *p}
+%parse-param    { Parser *p }
 
 %locations              // Generate token location code
 %define api.pure full   // Modify yylex to receive parameters as shown in %code provides
-%define api.location.type {Location}
+%define api.location.type {Source_Location}
 
 // Forward declarations for Lexer
 %code provides {
@@ -30,10 +30,11 @@
 
 // Enable debugging
 %define parse.trace
+%define parse.error verbose
 
 // TOKENS
 /// Keywords
-%token <value> CONST WHILE DO FOR SWITCH CASE PROC RETURN
+%token <value> CONST WHILE DO FOR SWITCH CASE DEFAULT PROC RETURN
 %token <value> TRUE FALSE
 %token <value> INT UINT FLOAT BOOL
 %token <value> IF ELSE
@@ -55,7 +56,7 @@
 
 // Non-terminal types and print routines
 %type <expr> expr expr_math expr_logic proc_call array_access
-%type <type> type type_standard
+%type <type> type
 %type <type> decl_proc_return
 
 %printer { symtype_print(yyo, $$); } type
@@ -83,9 +84,7 @@
 %%
 
 program:
-    { p->push(); }
-        stmt_list
-    { p->pop(); }
+    { p->init(); } stmt_list { p->pop(); }
 
 // stmt *
 stmt_list:
@@ -130,9 +129,8 @@ conditional:
     conditional_else_if /* Optional else if */
     conditional_else    /* Optional else */
     |
-
-    SWITCH expr
-        '{' switch_list '}';
+    SWITCH expr         { p->switch_begin($expr); }
+    '{' switch_list '}' { p->switch_end(); }
     ;
 
 // else_if *
@@ -154,14 +152,23 @@ conditional_else:
 
 // case *
 switch_list:
-    switch_list CASE switch_literal_list
-        scope
+    switch_list switch_case
     | %empty
     ;
 
+switch_case:
+    CASE                { p->switch_case_begin(); }
+    switch_literal_list { p->switch_case_end(); }
+        scope
+    |
+    DEFAULT             { p->switch_default(@DEFAULT); }
+        scope
+    ;
+
+
 switch_literal_list:
-    switch_literal_list ',' literal
-    | literal
+    switch_literal_list ',' literal { p->switch_case_add($literal); }
+    | literal                       { p->switch_case_add($literal); }
     ;
 
 loop:
@@ -174,9 +181,19 @@ loop:
     WHILE expr ';'
     |
 
-    FOR decl_var ';' expr ';' assignment
-        scope
+    FOR                                                      { p->push(); }
+    loop_for_init ';' loop_for_condition ';' loop_for_post
+        scope_no_action                                      { p->pop(); }
     ;
+
+loop_for_init:
+    decl_var | %empty;
+
+loop_for_condition:
+    expr | %empty;
+
+loop_for_post:
+    assignment | expr | %empty;
 
 decl_var:
     IDENTIFIER ':' type                     { p->decl($IDENTIFIER, @IDENTIFIER, $type); }
@@ -210,15 +227,10 @@ decl_proc_params_list:
 // return ?
 decl_proc_return:
     ARROW type { $$ = $2; }
-    | %empty { $$.base = Symbol_Type::VOID; }
+    | %empty { $$ = SYMTYPE_VOID; }
     ;
 
 type:
-    type_standard
-    | '*' type { $$ = $2; (*$$.pointer)++; } // Pointer to type
-    ;
-
-type_standard:
     INT 	{ $$.base = Symbol_Type::INT; }
     | UINT 	{ $$.base = Symbol_Type::UINT; }
     | FLOAT { $$.base = Symbol_Type::FLOAT; }
@@ -237,10 +249,22 @@ assignment:
     | IDENTIFIER AS_XOR expr  { p->assign($1, @1, Op_Assign::XOR, $expr); }
     | IDENTIFIER AS_SHL expr  { p->assign($1, @1, Op_Assign::SHL, $expr); }
     | IDENTIFIER AS_SHR expr  { p->assign($1, @1, Op_Assign::SHR, $expr); }
+
+    | array_access '=' expr     { p->array_assign($1, @1, Op_Assign::MOV, $expr); }
+    | array_access AS_ADD expr  { p->array_assign($1, @1, Op_Assign::ADD, $expr); }
+    | array_access AS_SUB expr  { p->array_assign($1, @1, Op_Assign::SUB, $expr); }
+    | array_access AS_MUL expr  { p->array_assign($1, @1, Op_Assign::MUL, $expr); }
+    | array_access AS_DIV expr  { p->array_assign($1, @1, Op_Assign::DIV, $expr); }
+    | array_access AS_MOD expr  { p->array_assign($1, @1, Op_Assign::MOD, $expr); }
+    | array_access AS_AND expr  { p->array_assign($1, @1, Op_Assign::AND, $expr); }
+    | array_access AS_OR expr   { p->array_assign($1, @1, Op_Assign::OR,  $expr); }
+    | array_access AS_XOR expr  { p->array_assign($1, @1, Op_Assign::XOR, $expr); }
+    | array_access AS_SHL expr  { p->array_assign($1, @1, Op_Assign::SHL, $expr); }
+    | array_access AS_SHR expr  { p->array_assign($1, @1, Op_Assign::SHR, $expr); }
     ;
 
 expr:
-	'(' expr ')' { $$ = $2; }
+	'(' expr ')' { $$ = $2; $$.loc = @1; }
     | expr_math
     | expr_logic
     | proc_call
@@ -285,7 +309,8 @@ expr_logic:
 
 proc_call:
     // Optional parameters
-    IDENTIFIER { p->pcall_begin(); } '(' proc_call_params ')' { p->pcall($IDENTIFIER, @IDENTIFIER, $$); }
+    IDENTIFIER               { p->pcall_begin(); }
+    '(' proc_call_params ')' { p->pcall($IDENTIFIER, @IDENTIFIER, $$); }
 
 // param *
 // Had to be split to allow left recursive grammar without the (, one_param) case
@@ -295,8 +320,8 @@ proc_call_params:
     ;
 
 comma_separated_exprs:
-    comma_separated_exprs ',' expr { p->pcall_add($expr); }
-    | expr { p->pcall_add($expr); }
+    comma_separated_exprs ',' expr  { p->pcall_add($expr); }
+    | expr                          { p->pcall_add($expr); }
     ;
 
 array_access:

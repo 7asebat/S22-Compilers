@@ -45,6 +45,7 @@ do       return DO;
 for      return FOR;
 switch   return SWITCH;
 case     return CASE;
+default  return DEFAULT;
 
 proc     return PROC;
 return   return RETURN;
@@ -60,7 +61,13 @@ bool     return BOOL;
 
 {identifier}    yylval->lexeme = strdup(yytext); return IDENTIFIER;
 {lit_int}       yylval->value  = atoi(yytext);   return LIT_INT;
-{lit_int}u      yylval->value  = atoi(yytext);   return LIT_UINT;
+
+{lit_int}u {
+    yytext[yyleng-1] = '\0';    // Remove 'u'
+    yylval->value = atoi(yytext);
+    return LIT_UINT;
+}
+
 {lit_float} {
     float v = atof(yytext);
     yylval->value = *(uint64_t*)(&v);
@@ -97,28 +104,4 @@ bool     return BOOL;
 {line}       ; /* skip lines */
 
 .            yyerror(yylloc, nullptr, "Unexpected character"); /* Any other character */
-
 %%
-/* OTHERS SECTION */
-// Entry point
-int
-main(int argc, char *argv[])
-{
-    // Input stream, open first argument as a file
-    yyin = fopen(argv[1], "r");
-    if (yyin == nullptr)
-        return -1;
-
-	// Disable debugging by default, set debugging if second arg is passed
-    yydebug = 0;
-    if (argc > 2)
-        yydebug = 1;
-
-    // Run parser
-    s22::Parser parser = {};
-    parser.current_scope = &parser.global;
-    yyparse(&parser);
-
-    fclose(yyin);
-    return 0;
-}

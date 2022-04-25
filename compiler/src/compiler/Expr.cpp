@@ -2,317 +2,166 @@
 
 namespace s22
 {
-	inline static Result<Symbol_Type>
-	type_allows_operation(const Symbol_Type &self)
+	Expr
+	make_error(const Error &err, Source_Location loc)
 	{
-		if (self.array || self.procedure || self.pointer)
-			return Error{ "invalid type" };
-
+		Expr self = { .kind = Expr::ERROR, .loc = loc };
+		self.as_error = err;
 		return self;
 	}
 
-	Result<Symbol_Type>
-	op_assign_evaluate(Op_Assign &self, Scope *scope)
+	Expr
+	make_literal(Scope *scope, uint64_t value, Source_Location loc, Symbol_Type::BASE base)
 	{
-		auto left = self.left->type;
+		Expr self = { .loc = loc };
+		self.kind = Expr::LITERAL;
+		self.type = { .base = base };
 
-		Symbol_Type right = self.right->type;
-		if (right == SYMTYPE_VOID)
-		{
-			auto err = expr_evaluate(*self.right, scope);
-			if (err)
-				return err;
-			right = self.right->type;
-		}
-
-		if (left != right)
-			return Error{ "type mismatch" };
-
-		if (self.left->is_constant)
-			return Error{ "assignment to constant" };
-
-		if (right == SYMTYPE_ERROR)
-			return SYMTYPE_ERROR;
-
-		return type_allows_operation(left);
+		self.as_literal = { .base = base, .value = value };
+		return self;
 	}
 
-	Result<Symbol_Type>
-	op_binary_evaluate(Op_Binary &self, Scope *scope)
+	Expr
+	make_identifier(Scope *scope, const char *id, Source_Location loc)
 	{
-		Symbol_Type left = self.left->type;
-		if (left == SYMTYPE_VOID)
-		{
-			auto err = expr_evaluate(*self.left, scope);
-			if (err)
-				return err;
-			left = self.left->type;
-		}
-
-		Symbol_Type right = self.right->type;
-		if (right == SYMTYPE_VOID)
-		{
-			auto err = expr_evaluate(*self.right, scope);
-			if (err)
-				return err;
-			right = self.right->type;
-		}
-
-		if (left != right)
-			return Error{ "type mismatch" };
-
-		if (left == SYMTYPE_ERROR || right == SYMTYPE_ERROR)
-			return SYMTYPE_ERROR;
-
-		return type_allows_operation(left);
-	}
-
-	Result<Symbol_Type>
-	op_unary_evaluate(Op_Unary &self, Scope *scope)
-	{
-		Symbol_Type right = self.right->type;
-		if (right == SYMTYPE_VOID)
-		{
-			auto err = expr_evaluate(*self.right, scope);
-			if (err)
-				return err;
-			right = self.right->type;
-		}
-
-		if (right == SYMTYPE_ERROR)
-			return SYMTYPE_ERROR;
-
-		return type_allows_operation(right);
-	}
-
-	Result<Symbol_Type>
-	proc_call_evaluate(Proc_Call &self, Scope *scope)
-	{
-		// Get matching symbol
-		auto sym = scope_get_id(scope, self.id);
+		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
-		{
-			return Error{ "undeclared identifier" };
-		}
-		else if (sym->type.procedure == false)
-		{
-			return Error{ "identifier is not a procedure" };
-		}
+			return make_error(Error{ loc, "undeclared identifier" }, loc);
 		sym->is_used = true;
 
-		if (sym->type.procedure->parameters.count != self.params.count)
-		{
-			return Error{ "wrong parameter count" };
-		}
+		Expr self = { .loc = loc };
+		self.kind = Expr::IDENTIFIER;
+		self.type = sym->type;
 
-		for (size_t i = 0; i < self.params.count; i++)
-		{
-			Symbol_Type type = self.params[i].type;
-			if (self.params[i].type == SYMTYPE_VOID)
-			{
-				auto err = expr_evaluate(self.params[i], scope);
-				if (err)
-					return err;
-
-				type = self.params[i].type;
-			}
-
-			if (type != sym->type.procedure->parameters[i])
-			{
-				return Error{ self.params[i].loc, "invalid argument" };
-			}
-		}
-
-		return sym->type.procedure->return_type | SYMTYPE_VOID;
-	}
-
-	Error
-	expr_evaluate(Expr &expr, Scope *scope)
-	{
-		switch (expr.kind)
-		{
-		case Expr::LITERAL: expr.type = { expr.as_literal.base };
-			break;
-
-		case Expr::IDENTIFIER:
-			if (auto sym = scope_get_id(scope, expr.as_id.id); sym == nullptr)
-			{
-				expr.type = SYMTYPE_ERROR;
-				return Error{ expr.loc, "undeclared identifier" };
-			}
-			else
-			{
-				expr.type = sym->type;
-			}
-			break;
-
-		case Expr::OP_ASSIGN:
-			if (auto[type, err] = op_assign_evaluate(expr.as_assign, scope); err)
-			{
-				expr.type = SYMTYPE_ERROR;
-				if (err.loc == Location{})
-					err.loc = expr.loc;
-				return err;
-			}
-			else
-			{
-				expr.type = type;
-			}
-			break;
-
-		case Expr::OP_BINARY:
-			if (auto[type, err] = op_binary_evaluate(expr.as_binary, scope); err)
-			{
-				expr.type = SYMTYPE_ERROR;
-				if (err.loc == Location{})
-					err.loc = expr.loc;
-				return err;
-			}
-			else
-			{
-				expr.type = type;
-			}
-			break;
-
-		case Expr::OP_UNARY:
-			if (auto[type, err] = op_unary_evaluate(expr.as_unary, scope); err)
-			{
-				expr.type = SYMTYPE_ERROR;
-				if (err.loc == Location{})
-					err.loc = expr.loc;
-				return err;
-			}
-			else
-			{
-				expr.type = type;
-			}
-			break;
-
-		case Expr::PROC_CALL:
-			if (auto[type, err] = proc_call_evaluate(expr.as_proc_call, scope); err)
-			{
-				expr.type = SYMTYPE_ERROR;
-				if (err.loc == Location{})
-					err.loc = expr.loc;
-				return err;
-			}
-			else
-			{
-				expr.type = type;
-			}
-			break;
-
-		default: return Error{ "unrecognized type" };
-		}
-
-		return Error{};
-	}
-
-	Result<Expr>
-	literal_new(Scope *scope, uint64_t value, Location loc, Symbol_Type::BASE base)
-	{
-		Expr self = { Expr::LITERAL };
-		self.as_literal = { .base = base, .value = value };
-		self.type = { base };
-		self.loc = loc;
-
+		self.as_id = { .sym = sym };
 		return self;
 	}
 
-	Result<Expr>
-	identifier_new(Scope *scope, const char *id, Location loc)
+	Expr
+	make_op_assign(Scope *scope, const char *id, Source_Location loc, Expr &right, Op_Assign::KIND kind)
 	{
-		Expr self = { Expr::IDENTIFIER };
-		self.loc = loc;
-		auto &identifier = self.as_id;
+		auto sym = scope_get_id(scope, id);
+		if (sym == nullptr)
+			return make_error(Error{ loc, "undeclared identifier" }, loc);
+		sym->is_used = true;
 
-		if (auto sym = scope_get_id(scope, id); sym == nullptr)
-		{
-			return Error{ loc, "undeclared identifier" };
-		}
+		if (sym->type != right.type)
+			return make_error(Error{ right.loc, "type mismatch" }, loc);
+
+		if (sym->is_constant || sym->type.procedure)
+			return make_error(Error{ loc, "assignment to constant" }, loc);
+
+		sym->is_set = true;
+
+		Expr self = { .loc = loc };
+		self.kind = Expr::OP_ASSIGN;
+		self.type = sym->type;
+
+		self.as_assign = { .kind = kind, .left = copy(make_identifier(scope, id, loc)), .right = copy(right) };
+		return self;
+	}
+
+	Expr
+	make_op_array_assign(Scope *scope, Expr &left, Source_Location loc, Expr &right, Op_Assign::KIND kind)
+	{
+		if (left.type != right.type)
+			return make_error(Error{ right.loc, "type mismatch" }, loc);
+
+		Expr self = { .loc = loc };
+		self.kind = Expr::OP_ASSIGN;
+		self.type = left.type;
+
+		self.as_assign = { .kind = kind, .left = copy(left), .right = copy(right) };
+		return self;
+	}
+
+	Expr
+	make_op_binary(Scope *scope, Expr &left, Source_Location loc, Expr &right, Op_Binary::KIND kind)
+	{
+		if (left.type != right.type)
+			return make_error(Error{ right.loc, "type mismatch" }, loc);
+
+		if (symtype_allows_arithmetic(left.type) == false)
+			return make_error(Error{ right.loc, "invalid operand" }, loc);
+
+		Expr self = { .loc = loc };
+		self.kind = Expr::OP_BINARY;
+
+		if (kind < Op_Binary::LOGICAL)
+			self.type = left.type;
 		else
-		{
-			sym->is_used = true;
+			self.type = SYMTYPE_BOOL;
 
-			strcpy_s(identifier.id, id);
-			self.type = sym->type;
-		}
-
+		self.as_binary = { .kind = kind, .left = copy(left), .right = copy(right) };
 		return self;
 	}
 
-	Result<Expr>
-	op_assign_new(Scope *scope, const char *id, Location loc, Expr &right, Op_Assign::KIND kind)
+	Expr
+	make_op_unary(Scope *scope, Expr &right, Source_Location loc, Op_Unary::KIND kind)
 	{
-		Expr self = { Expr::OP_ASSIGN };
-		self.loc = loc;
-		auto &assign = self.as_assign;
+		if (symtype_allows_arithmetic(right.type) == false)
+			return make_error(Error{ right.loc, "invalid operand" }, loc);
 
-		if (auto sym = scope_get_id(scope, id); sym == nullptr)
-		{
-			return Error{ loc, "undeclared identifier" };
-		}
+		Expr self = { .loc = loc };
+		self.kind = Expr::OP_UNARY;
+
+		if (kind != Op_Unary::NOT)
+			self.type = right.type;
 		else
+			self.type = SYMTYPE_BOOL;
+
+		self.as_unary = { .kind = kind, .right = copy(right) };
+		return self;
+	}
+
+	Expr
+	make_array_access(Scope *scope, const char *id, Source_Location loc, Expr &expr)
+	{
+		auto sym = scope_get_id(scope, id);
+		if (sym == nullptr)
+			return make_error(Error{ loc, "undeclared identifier" }, loc);
+		sym->is_used = true;
+
+		if (sym->type.array == false)
+			return make_error(Error{ loc, "type cannot be indexed" }, loc);
+
+		if (symtype_is_valid_index(expr.type) == false)
+			return make_error(Error{ expr.loc, "invalid index" }, loc);
+
+		Expr self = { .loc = loc };
+		self.kind = Expr::ARRAY_ACCESS;
+		self.type = sym->type;
+		self.type.array = 0;
+
+		self.as_array = { .sym = sym, .index = copy(expr) };
+		return self;
+	}
+
+	Expr
+	make_proc_call(Scope *scope, const char *id, Source_Location loc, Buf<Expr> params)
+	{
+		auto sym = scope_get_id(scope, id);
+		if (sym == nullptr)
+			return make_error(Error{ loc, "undeclared identifier" }, loc);
+		sym->is_used = true;
+
+		if (sym->type.procedure == false)
+			return make_error(Error{ loc, "type is not callable" }, loc);
+
+		if (sym->type.procedure->parameters.count != params.count)
+			return make_error(Error{ loc, "wrong parameter count" }, loc);
+
+		for (size_t i = 0; i < params.count; i++)
 		{
-			sym->is_used = true;
-			assign.left = sym;
+			if (params[i].type != sym->type.procedure->parameters[i])
+				return make_error(Error{ params[i].loc, "invalid argument" }, loc);
 		}
 
-		assign.kind = kind;
-		assign.right = &right;
+		Expr self { .loc = loc };
+		self.kind = Expr::PROC_CALL;
+		self.type = sym->type.procedure->return_type | SYMTYPE_VOID;
 
-		if (auto err = expr_evaluate(self, scope))
-			return err;
-
-		return self;
-	}
-
-	Result<Expr>
-	op_binary_new(Scope *scope, Expr &left, Location loc, Expr &right, Op_Binary::KIND kind)
-	{
-		Expr self = { Expr::OP_BINARY };
-		self.loc = loc;
-		auto &binary = self.as_binary;
-
-		binary.kind = kind;
-		binary.left = &left;
-		binary.right = &right;
-
-		if (auto err = expr_evaluate(self, scope))
-			return err;
-
-		return self;
-	}
-
-	Result<Expr>
-	op_unary_new(Scope *scope, Expr &right, Location loc, Op_Unary::KIND kind)
-	{
-		Expr self = { Expr::OP_UNARY };
-		self.loc = loc;
-		auto &unary = self.as_unary;
-
-		unary.kind = kind;
-		unary.right = &right;
-
-		if (auto err = expr_evaluate(self, scope))
-			return err;
-
-		return self;
-	}
-
-	Result<Expr>
-	proc_call_new(Scope *scope, const char *id, Location loc, Buf<Expr> params)
-	{
-		Expr self = { Expr::PROC_CALL };
-		self.loc = loc;
-		auto &proc = self.as_proc_call;
-
-		strcpy_s(proc.id, id);
-		proc.params = params;
-
-		if (auto err = expr_evaluate(self, scope))
-			return err;
-
+		self.as_proc_call = { .sym = sym, .params = params };
 		return self;
 	}
 }

@@ -1,8 +1,7 @@
 #pragma once
 
+#include "compiler/Backend.h"
 #include "compiler/Symbol.h"
-
-#include <string_view>
 
 namespace s22
 {
@@ -10,9 +9,7 @@ namespace s22
 
 	struct Literal
 	{
-		// 64 bits for all constants
 		Symbol_Type::BASE base;
-		uint64_t value;
 	};
 
 	struct Identifier
@@ -109,12 +106,6 @@ namespace s22
 		Buf<Expr> params;
 	};
 
-	struct Value_Location
-	{
-		enum REGISTER { R0, R1, R2, R3, R4 };
-		REGISTER reg;
-	};
-
 	struct Expr
 	{
 		enum KIND
@@ -126,15 +117,13 @@ namespace s22
 			OP_BINARY,
 			OP_UNARY,
 			PROC_CALL,
-
-			// ERROR PROPAGATION
-			ERROR,
 		};
 
 		KIND kind;
 		Symbol_Type type;
 		Source_Location loc;
 		Value_Location value_loc;
+		Error err;
 
 		union
 		{
@@ -145,7 +134,6 @@ namespace s22
 			Op_Binary as_binary;
 			Op_Unary as_unary;
 			Proc_Call as_proc_call;
-			Error as_error;
 		};
 	};
 

@@ -119,8 +119,8 @@ namespace s22
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol, Expr &expr)
 	{
-		if (expr.kind == Expr::ERROR)
-			return expr.as_error;
+		if (expr.err)
+			return expr.err;
 
 		if (symbol.type != expr.type)
 			return Error{expr.loc, "type mismatch"};

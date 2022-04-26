@@ -32,6 +32,9 @@ namespace s22
 	Parser::init()
 	{
 		this->current_scope = &this->global;
+
+		this->backend = backend_instance();
+		backend_init(this->backend);
 	}
 
 	void
@@ -69,7 +72,7 @@ namespace s22
 	Parser::return_value(Source_Location loc, Expr &expr)
 	{
 		auto err = scope_return_is_valid(this->current_scope, expr.type);
-		if (err && expr.kind != Expr::ERROR) // Limit error propagation
+		if (err && expr.err == false) // Limit error propagation
 		{
 			parse_error(Error{ expr.loc, err });
 		}
@@ -86,8 +89,8 @@ namespace s22
 	{
 		dst = make_identifier(this->current_scope, id, loc);
 
-		if (dst.kind == Expr::ERROR)
-			parse_error(dst.as_error);
+		if (dst.err)
+			parse_error(dst.err);
 	}
 
 	void
@@ -95,8 +98,8 @@ namespace s22
 	{
 		auto dst = make_op_assign(this->current_scope, id, loc, right, op);
 
-		if (dst.kind == Expr::ERROR && right.kind != Expr::ERROR)
-			parse_error(dst.as_error);
+		if (dst.err && right.err == false)
+			parse_error(dst.err);
 	}
 
 	void
@@ -104,8 +107,11 @@ namespace s22
 	{
 		auto dst = make_op_array_assign(this->current_scope, left, loc, right, op);
 
-		if (dst.kind == Expr::ERROR && right.kind != Expr::ERROR)
-			parse_error(dst.as_error);
+		if (dst.err && right.err == false)
+			parse_error(dst.err);
+
+		if (dst.err == false)
+			backend_expr(this->backend, &dst);
 	}
 
 	void
@@ -113,8 +119,8 @@ namespace s22
 	{
 		dst = make_op_binary(this->current_scope, left, loc, right, op);
 
-		if (dst.kind == Expr::ERROR && left.kind != Expr::ERROR && right.kind != Expr::ERROR)
-			parse_error(dst.as_error);
+		if (dst.err && left.err == false && right.err == false)
+			parse_error(dst.err);
 	}
 
 	void
@@ -122,8 +128,8 @@ namespace s22
 	{
 		dst = make_op_unary(this->current_scope, right, loc, op);
 
-		if (dst.kind == Expr::ERROR && right.kind != Expr::ERROR)
-			parse_error(dst.as_error);
+		if (dst.err && right.err == false)
+			parse_error(dst.err);
 	}
 
 	void
@@ -131,8 +137,8 @@ namespace s22
 	{
 		dst = make_array_access(this->current_scope, id, loc, expr);
 
-		if (dst.kind == Expr::ERROR && expr.kind != Expr::ERROR)
-			parse_error(dst.as_error);
+		if (dst.err && expr.err == false)
+			parse_error(dst.err);
 	}
 
 	void
@@ -158,10 +164,10 @@ namespace s22
 
 		bool unique_error = true;
 		for (const auto &expr : params)
-			unique_error &= expr.kind != Expr::ERROR;
+			unique_error &= expr.err == false;
 
-		if (dst.kind == Expr::ERROR && unique_error)
-			parse_error(dst.as_error);
+		if (dst.err && unique_error)
+			parse_error(dst.err);
 
 		this->proc_call_arguments_stack.pop();
 	}
@@ -176,6 +182,9 @@ namespace s22
 		{
 			parse_error(err);
 		}
+
+		if (err == false)
+			backend_decl(this->backend, &sym);
 	}
 
 	void
@@ -184,23 +193,29 @@ namespace s22
 		Symbol sym = { .id = id, .type = type, .defined_at = loc };
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym, expr);
-		if (err && expr.kind != Expr::ERROR)
+		if (err && expr.err == false)
 		{
 			parse_error(err);
 		}
+
+		if (err == false)
+			backend_decl_expr(this->backend, &sym, &expr);
 	}
 
 	void
 	Parser::decl_array(const char *id, Source_Location loc, Symbol_Type type, Expr &index)
 	{
 		Symbol sym = { .id = id, .type = type, .defined_at = loc };
-		sym.type.array = index.as_literal.value;
+		sym.type.array = index.value_loc.value;
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym);
-		if (err && index.kind != Expr::ERROR)
+		if (err && index.err == false)
 		{
 			parse_error(err);
 		}
+
+		if (err == false)
+			backend_decl(this->backend, &sym);
 	}
 
 	void
@@ -209,7 +224,7 @@ namespace s22
 		Symbol sym = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
 
 		auto [_, err] = scope_add_decl(this->current_scope, sym, expr);
-		if (err && expr.kind != Expr::ERROR)
+		if (err && expr.err == false)
 		{
 			parse_error(err);
 		}
@@ -277,14 +292,14 @@ namespace s22
 	{
 		if (expr.kind != Expr::LITERAL || symtype_is_valid_index(expr.type) == false)
 		{
-			if (expr.kind != Expr::ERROR)
+			if (expr.err == false)
 				parse_error(Error{ expr.loc, "invalid case" });
 
 			return;
 		}
 
 		// Insert into the partition
-		Switch_Case swc = { .value = expr.as_literal.value, .partition = this->switch_current_partition };
+		Switch_Case swc = { .value = expr.value_loc.value, .partition = this->switch_current_partition };
 		if (this->switch_cases.contains(swc))
 			return parse_error(Error{ expr.loc, "duplicate case" });
 

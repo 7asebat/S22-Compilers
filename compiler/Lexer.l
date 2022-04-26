@@ -1,7 +1,6 @@
 /* DEFINITIONS SECTION */
 %{
     #include <stdlib.h>    // atoi
-    #include <stdio.h>     // getline
     #include "Parser.hpp"  // Token definitions
 
     // Call location_update before each token is processed
@@ -70,7 +69,7 @@ bool     return BOOL;
 
 {lit_float} {
     float v = atof(yytext);
-    yylval->value = *(uint64_t*)(&v);
+    yylval->value = *((uint64_t*)&v);
     return LIT_FLOAT;
 }
 

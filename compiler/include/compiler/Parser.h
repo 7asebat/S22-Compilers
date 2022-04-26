@@ -138,6 +138,8 @@ namespace s22
 
 		std::unordered_set<Switch_Case, Switch_Case::Hash, Switch_Case::Pred> switch_cases;
 		size_t switch_current_partition;
+
+		Backend backend;
 	};
 
 	enum class Error_Level

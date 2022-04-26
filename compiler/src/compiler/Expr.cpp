@@ -5,19 +5,18 @@ namespace s22
 	Expr
 	make_error(const Error &err, Source_Location loc)
 	{
-		Expr self = { .kind = Expr::ERROR, .loc = loc };
-		self.as_error = err;
+		Expr self = { .loc = loc, .err = err };
 		return self;
 	}
 
 	Expr
 	make_literal(Scope *scope, uint64_t value, Source_Location loc, Symbol_Type::BASE base)
 	{
-		Expr self = { .loc = loc };
+		Expr self = { .loc = loc, .value_loc = { .kind = Value_Location::IMM, .value = value } };
 		self.kind = Expr::LITERAL;
 		self.type = { .base = base };
 
-		self.as_literal = { .base = base, .value = value };
+		self.as_literal = { .base = base };
 		return self;
 	}
 
@@ -149,7 +148,7 @@ namespace s22
 			return make_error(Error{ loc, "type is not callable" }, loc);
 
 		if (sym->type.procedure->parameters.count != params.count)
-			return make_error(Error{ loc, "wrong parameter count" }, loc);
+			return make_error(Error{ loc, "invalid argument count" }, loc);
 
 		for (size_t i = 0; i < params.count; i++)
 		{

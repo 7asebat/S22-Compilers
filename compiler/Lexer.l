@@ -50,26 +50,25 @@ proc     return PROC;
 return   return RETURN;
 "->"     return ARROW;
 
-true     yylval->value = 1; return TRUE;
-false    yylval->value = 0; return FALSE;
+true     yylval->value.b = 1; return TRUE;
+false    yylval->value.b = 0; return FALSE;
 
 int      return INT;
 uint     return UINT;
 float    return FLOAT;
 bool     return BOOL;
 
-{identifier}    yylval->lexeme = strdup(yytext); return IDENTIFIER;
-{lit_int}       yylval->value  = atoi(yytext);   return LIT_INT;
+{identifier}    yylval->lexeme     = yytext;        return IDENTIFIER;
+{lit_int}       yylval->value.s64  = atoi(yytext);  return LIT_INT;
 
 {lit_int}u {
-    yytext[yyleng-1] = '\0';    // Remove 'u'
-    yylval->value = atoi(yytext);
+    yytext[yyleng-1]  = '\0';    // Remove 'u'
+    yylval->value.u64 = atoi(yytext);
     return LIT_UINT;
 }
 
 {lit_float} {
-    float v = atof(yytext);
-    yylval->value = *((uint64_t*)&v);
+    yylval->value.f64 = strtod(yytext, nullptr);
     return LIT_FLOAT;
 }
 

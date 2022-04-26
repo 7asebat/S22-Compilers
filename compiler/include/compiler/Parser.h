@@ -2,20 +2,27 @@
 
 #include "compiler/Symbol.h"
 #include "compiler/Expr.h"
+#include "compiler/Backend.h"
 
 #include <stack>
 #include <unordered_set>
 
 namespace s22
 {
+	struct Parse_Unit
+	{
+		Expr expr;
+		Operand opr;
+	};
+
 	struct Parser
 	{
 		union YY_Symbol
 		{
-			const char* lexeme;
-			uint64_t value;
+			Str lexeme;
+			Literal value;
 			Symbol_Type type;
-			Expr expr;
+			Parse_Unit unit;
 		};
 
 		void
@@ -34,58 +41,58 @@ namespace s22
 		return_value(Source_Location loc);
 
 		void
-		return_value(Source_Location loc, Expr &expr);
+		return_value(Source_Location loc, const Parse_Unit &unit);
 
-		void
-		literal(uint64_t value, Source_Location loc, Symbol_Type::BASE base, Expr &dst);
+		Parse_Unit
+		literal(Literal lit, Source_Location loc, Symbol_Type::BASE base);
 
-		void
-		id(const char *id, Source_Location loc, Expr &dst);
+		Parse_Unit
+		id(const Str &id, Source_Location loc);
 
-		void
-		assign(const char *id, Source_Location loc, Op_Assign::KIND op, Expr &right);
+		Parse_Unit
+		assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &unit);
 
-		void
-		array_assign(Expr &left, Source_Location loc, Op_Assign::KIND op, Expr &right);
+		Parse_Unit
+		array_assign(const Parse_Unit &left, Source_Location loc, Op_Assign op, const Parse_Unit &right);
 
-		void
-		binary(Expr &left, Source_Location loc, Op_Binary::KIND op, Expr &right, Expr &dst);
+		Parse_Unit
+		binary(const Parse_Unit &left, Source_Location loc, Op_Binary op, const Parse_Unit &right);
 
-		void
-		unary(Op_Unary::KIND op, Expr &right, Source_Location loc, Expr &dst);
+		Parse_Unit
+		unary(Op_Unary op, const Parse_Unit &unit, Source_Location loc);
 
-		void
-		array(const char *id, Source_Location loc, Expr &expr, Expr &dst);
+		Parse_Unit
+		array(const Str &id, Source_Location loc, const Parse_Unit &unit);
 
 		void
 		pcall_begin();
 
 		void
-		pcall_add(Expr &expr);
+		pcall_add(const Parse_Unit &unit);
+
+		Parse_Unit
+		pcall(const Str &id, Source_Location loc);
 
 		void
-		pcall(const char *id, Source_Location loc, Expr &dst);
+		decl(const Str &id, Source_Location loc, Symbol_Type type);
 
 		void
-		decl(const char *id, Source_Location loc, Symbol_Type type);
+		decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit);
 
 		void
-		decl_expr(const char *id, Source_Location loc, Symbol_Type type, Expr &expr);
+		decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit);
 
 		void
-		decl_array(const char *id, Source_Location loc, Symbol_Type type, Expr &index);
+		decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit);
 
 		void
-		decl_const(const char *id, Source_Location loc, Symbol_Type type, Expr &expr);
+		decl_proc_begin(const Str &id, Source_Location loc);
 
 		void
-		decl_proc_begin(const char *id, Source_Location loc);
+		decl_proc_end(const Str &id, Symbol_Type return_type);
 
 		void
-		decl_proc_end(const char *id, Symbol_Type return_type);
-
-		void
-		switch_begin(const Expr &expr);
+		switch_begin(const Parse_Unit &unit);
 
 		void
 		switch_end();
@@ -97,7 +104,7 @@ namespace s22
 		switch_case_end();
 
 		void
-		switch_case_add(Expr &expr);
+		switch_case_add(const Parse_Unit &unit);
 
 		void
 		switch_default(Source_Location loc);

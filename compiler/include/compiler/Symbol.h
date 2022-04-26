@@ -52,14 +52,10 @@ namespace s22
 				return false;
 
 			if (procedure != other.procedure)
-			{
 				return false;
-			}
-			else
-			{
-				if (array != other.array)
-					return false;
-			}
+
+			if (array != other.array)
+				return false;
 
 			return true;
 		}
@@ -75,14 +71,14 @@ namespace s22
 	symtype_allows_arithmetic(const Symbol_Type &type);
 
 	bool
-	symtype_is_valid_index(const Symbol_Type &type);
+	symtype_is_integral(const Symbol_Type &type);
 
 	void
 	symtype_print(FILE *out, const Symbol_Type &type);
 
 	struct Symbol
 	{
-		std::string id;
+		Str id;
 		Symbol_Type type;
 		Source_Location defined_at;
 
@@ -107,7 +103,7 @@ namespace s22
 
 	struct Expr;
 	Result<Symbol *>
-	scope_add_decl(Scope *self, const Symbol &symbol, Expr &expr);
+	scope_add_decl(Scope *self, const Symbol &symbol, const Expr &expr);
 
 	Scope *
 	scope_push(Scope *&self);
@@ -124,16 +120,6 @@ namespace s22
 	Procedure
 	scope_make_proc(Scope *self, Symbol_Type return_type);
 }
-
-template<>
-struct std::formatter<s22::Source_Location> : std::formatter<std::string>
-{
-	auto
-	format(s22::Source_Location loc, format_context &ctx)
-	{
-		return format_to(ctx.out(), "{},{}", loc.first_line, loc.first_column);
-	}
-};
 
 template<>
 struct std::formatter<s22::Symbol_Type> : std::formatter<std::string>

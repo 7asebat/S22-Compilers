@@ -58,7 +58,7 @@ namespace s22
 	location_print(FILE *out, const Source_Location *const loc)
 	{
 		auto str = std::format("{}", *loc);
-		fprintf(out, str.data());
+		fprintf(out, "%s", str.data());
 	}
 
 	bool
@@ -69,11 +69,10 @@ namespace s22
 	}
 
 	bool
-	symtype_is_valid_index(const Symbol_Type &type)
+	symtype_is_integral(const Symbol_Type &type)
 	{
 		constexpr Symbol_Type SYMTYPE_INT  = { .base = Symbol_Type::INT };
 		constexpr Symbol_Type SYMTYPE_UINT = { .base = Symbol_Type::UINT };
-		constexpr Symbol_Type SYMTYPE_BOOL = { .base = Symbol_Type::BOOL };
 
 		return type == SYMTYPE_INT || type == SYMTYPE_UINT || type == SYMTYPE_BOOL;
 	}
@@ -117,7 +116,7 @@ namespace s22
 	}
 
 	Result<Symbol *>
-	scope_add_decl(Scope *self, const Symbol &symbol, Expr &expr)
+	scope_add_decl(Scope *self, const Symbol &symbol, const Expr &expr)
 	{
 		if (expr.err)
 			return expr.err;

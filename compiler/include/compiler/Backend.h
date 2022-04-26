@@ -9,9 +9,12 @@ namespace s22
 	struct Symbol;
 	struct Expr;
 
-	struct Value_Location
+	// Temporary register
+	// Memory address
+	// Immediate value
+	struct Operand
 	{
-		enum KIND
+		enum LOCATION
 		{
 			// General purpose registers
 			R0, R1, R2, R3, R4,
@@ -25,7 +28,8 @@ namespace s22
 			// Memory address
 			MEM,
 		};
-		KIND kind;
+		LOCATION loc;
+		size_t size;
 
 		union // immediate value/memory offset
 		{
@@ -33,6 +37,7 @@ namespace s22
 			uint64_t offset;
 		};
 	};
+
 
 	Backend
 	backend_instance();
@@ -45,7 +50,4 @@ namespace s22
 
 	void
 	backend_decl_expr(Backend self, const Symbol *sym, const Expr *expr);
-
-	void
-	backend_expr(Backend self, const Expr *expr);
 }

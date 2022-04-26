@@ -40,7 +40,7 @@ namespace s22
 
 	template <typename T>
 	inline static T *
-	copy(const T& other)
+	clone(const T& other)
 	{
 		auto ptr = alloc<T>();
 		*ptr = T{other};
@@ -134,18 +134,37 @@ namespace s22
 		operator=(const T* other) { return *this; }
 	};
 
-	template <>
-	inline Buf<char>&
-	Buf<char>::operator=(const char *other)
+	struct Str
 	{
-		this->count = strlen(other);
-		this->data = alloc<char>(this->count + 1);
-		memcpy(this->data, other, this->count);
+		constexpr static auto CAP = 256;
 
-		return *this;
-	}
+		char data[CAP + 1];
+		size_t count;
 
-	using Str = Buf<char>;
+		inline char &
+		operator[](size_t i) { return data[i]; }
+
+		inline bool
+		operator==(const char *other) const { return strcmp(data, other) == 0; }
+
+		inline bool
+		operator!=(const char *other) const { return !operator==(other); }
+
+		inline bool
+		operator==(const Str &other) const { return operator==(other.data); }
+
+		inline bool
+		operator!=(const Str &other) const { return !operator==(other); }
+
+		inline Str&
+		operator=(const char *other) { strcpy_s(data, other); count = strlen(data); return *this;  }
+
+		inline const char*
+		begin() { return data; }
+
+		inline const char*
+		end() { return data + count; }
+	};
 
 	struct Error
 	{
@@ -257,8 +276,18 @@ namespace s22
 		inline T
 		operator |(const T& other) { return bool(*this) ? *data : other; }
 	};
-
 }
+
+template<>
+struct std::formatter<s22::Source_Location> : std::formatter<std::string>
+{
+	auto
+	format(s22::Source_Location loc, format_context &ctx)
+	{
+		return format_to(ctx.out(), "{},{} --- {},{}",
+			loc.first_line, loc.first_column, loc.last_line, loc.last_column);
+	}
+};
 
 template <>
 struct std::formatter<s22::Error> : std::formatter<std::string>

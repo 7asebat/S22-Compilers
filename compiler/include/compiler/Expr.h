@@ -109,6 +109,12 @@ namespace s22
 		Buf<Expr> params;
 	};
 
+	struct Value_Location
+	{
+		enum REGISTER { R0, R1, R2, R3, R4 };
+		REGISTER reg;
+	};
+
 	struct Expr
 	{
 		enum KIND
@@ -128,6 +134,7 @@ namespace s22
 		KIND kind;
 		Symbol_Type type;
 		Source_Location loc;
+		Value_Location value_loc;
 
 		union
 		{

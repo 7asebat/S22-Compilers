@@ -28,6 +28,7 @@ set(COMPILER_SOURCE_FILES
 	compiler/src/compiler/Expr.cpp
 	compiler/src/compiler/Symbol.cpp
 	compiler/src/compiler/Parser.cpp
+	compiler/src/compiler/Backend.cpp
 	compiler/src/compiler/main.cpp
 )
 

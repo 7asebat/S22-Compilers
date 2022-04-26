@@ -50,7 +50,7 @@
 %token <value> ARROW
 
 /// Others
-%token <lexeme> IDENTIFIER
+%token <id> IDENTIFIER
 %token <value> LIT_INT LIT_UINT LIT_FLOAT
 %nterm <unit> literal
 

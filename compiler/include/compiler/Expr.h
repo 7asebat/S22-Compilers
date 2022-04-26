@@ -111,3 +111,87 @@ namespace s22
 	Expr
 	expr_proc_call(Scope *scope, const char *id, Source_Location loc, Buf<Expr> params);
 }
+
+template <>
+struct std::formatter<s22::Op_Assign> : std::formatter<std::string>
+{
+	auto
+	format(s22::Op_Assign op, format_context &ctx)
+	{
+		using s22::Op_Assign;
+
+		switch (op)
+		{
+		case Op_Assign::MOV: return format_to(ctx.out(), "MOV");
+		case Op_Assign::ADD: return format_to(ctx.out(), "ADD");
+		case Op_Assign::SUB: return format_to(ctx.out(), "SUB");
+		case Op_Assign::MUL: return format_to(ctx.out(), "MUL");
+		case Op_Assign::DIV: return format_to(ctx.out(), "DIV");
+		case Op_Assign::MOD: return format_to(ctx.out(), "MOD");
+
+		case Op_Assign::AND: return format_to(ctx.out(), "AND");
+		case Op_Assign::OR:  return format_to(ctx.out(), "OR");
+		case Op_Assign::XOR: return format_to(ctx.out(), "XOR");
+		case Op_Assign::SHL: return format_to(ctx.out(), "SHL");
+		case Op_Assign::SHR: return format_to(ctx.out(), "SHR");
+		}
+
+		return ctx.out();
+	}
+};
+
+template <>
+struct std::formatter<s22::Op_Binary> : std::formatter<std::string>
+{
+	auto
+	format(s22::Op_Binary op, format_context &ctx)
+	{
+		using s22::Op_Binary;
+
+		switch (op)
+		{
+		case Op_Binary::ADD: return format_to(ctx.out(), "ADD");
+		case Op_Binary::SUB: return format_to(ctx.out(), "SUB");
+		case Op_Binary::MUL: return format_to(ctx.out(), "MUL");
+		case Op_Binary::DIV: return format_to(ctx.out(), "DIV");
+		case Op_Binary::MOD: return format_to(ctx.out(), "MOD");
+
+		case Op_Binary::AND: return format_to(ctx.out(), "AND");
+		case Op_Binary::OR: return format_to(ctx.out(), "OR");
+		case Op_Binary::XOR: return format_to(ctx.out(), "XOR");
+		case Op_Binary::SHL: return format_to(ctx.out(), "SHL");
+		case Op_Binary::SHR: return format_to(ctx.out(), "SHR");
+
+		// Branch conditions
+		case Op_Binary::LT: return format_to(ctx.out(), "LT");
+		case Op_Binary::LEQ: return format_to(ctx.out(), "LEQ");
+		case Op_Binary::EQ: return format_to(ctx.out(), "EQ");
+		case Op_Binary::NEQ: return format_to(ctx.out(), "NEQ");
+		case Op_Binary::GT: return format_to(ctx.out(), "GT");
+		case Op_Binary::GEQ: return format_to(ctx.out(), "GEQ");
+
+		// L_AND, L_OR do not correspond to instructions
+		}
+
+		return ctx.out();
+	}
+};
+
+template <>
+struct std::formatter<s22::Op_Unary> : std::formatter<std::string>
+{
+	auto
+	format(s22::Op_Unary op, format_context &ctx)
+	{
+		using s22::Op_Unary;
+
+		switch (op)
+		{
+		case Op_Unary::NOT: return format_to(ctx.out(), "NOT");
+		case Op_Unary::NEG: return format_to(ctx.out(), "NEG");
+		case Op_Unary::INV: return format_to(ctx.out(), "INV");
+		}
+
+		return ctx.out();
+	}
+};

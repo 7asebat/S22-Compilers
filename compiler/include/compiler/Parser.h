@@ -19,7 +19,7 @@ namespace s22
 	{
 		union YY_Symbol
 		{
-			Str lexeme;
+			Str id;
 			Literal value;
 			Symbol_Type type;
 			Parse_Unit unit;
@@ -50,19 +50,19 @@ namespace s22
 		id(const Str &id, Source_Location loc);
 
 		Parse_Unit
-		assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &unit);
+		array(const Str &id, Source_Location loc, const Parse_Unit &right);
 
-		Parse_Unit
+		void
+		assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &right);
+
+		void
 		array_assign(const Parse_Unit &left, Source_Location loc, Op_Assign op, const Parse_Unit &right);
 
 		Parse_Unit
 		binary(const Parse_Unit &left, Source_Location loc, Op_Binary op, const Parse_Unit &right);
 
 		Parse_Unit
-		unary(Op_Unary op, const Parse_Unit &unit, Source_Location loc);
-
-		Parse_Unit
-		array(const Str &id, Source_Location loc, const Parse_Unit &unit);
+		unary(Op_Unary op, const Parse_Unit &right, Source_Location loc);
 
 		void
 		pcall_begin();
@@ -77,13 +77,13 @@ namespace s22
 		decl(const Str &id, Source_Location loc, Symbol_Type type);
 
 		void
-		decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit);
+		decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right);
 
 		void
-		decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit);
+		decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right);
 
 		void
-		decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit);
+		decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right);
 
 		void
 		decl_proc_begin(const Str &id, Source_Location loc);

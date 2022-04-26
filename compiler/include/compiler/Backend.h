@@ -9,6 +9,10 @@ namespace s22
 	struct Symbol;
 	struct Expr;
 
+	enum class Op_Assign;
+	enum class Op_Binary;
+	enum class Op_Unary;
+
 	// Temporary register
 	// Memory address
 	// Immediate value
@@ -38,7 +42,6 @@ namespace s22
 		};
 	};
 
-
 	Backend
 	backend_instance();
 
@@ -49,5 +52,23 @@ namespace s22
 	backend_decl(Backend self, const Symbol *sym);
 
 	void
-	backend_decl_expr(Backend self, const Symbol *sym, const Expr *expr);
+	backend_decl_expr(Backend self, const Symbol *sym, Operand right);
+
+	Operand
+	backend_id(Backend self, const Symbol *sym);
+
+	Operand
+	backend_array_access(Backend self, const Symbol *sym, Operand right);
+
+	void
+	backend_assign(Backend self, Op_Assign op, const Symbol *sym, Operand right);
+
+	void
+	backend_array_assign(Backend self, Op_Assign op, Operand left, Operand right);
+
+	Operand
+	backend_binary(Backend self, Op_Binary op, Operand left, Operand right);
+
+	Operand
+	backend_unary(Backend self, Op_Unary op, Operand right);
 }

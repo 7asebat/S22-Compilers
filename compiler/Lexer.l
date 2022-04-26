@@ -58,7 +58,7 @@ uint     return UINT;
 float    return FLOAT;
 bool     return BOOL;
 
-{identifier}    yylval->lexeme     = yytext;        return IDENTIFIER;
+{identifier}    yylval->id         = yytext;        return IDENTIFIER;
 {lit_int}       yylval->value.s64  = atoi(yytext);  return LIT_INT;
 
 {lit_int}u {

@@ -9,6 +9,23 @@
 
 namespace s22
 {
+	bool
+	operand_is_register(Operand opr)
+	{
+		switch (opr.loc)
+		{
+		case Operand::R0:
+		case Operand::R1:
+		case Operand::R2:
+		case Operand::R3:
+		case Operand::R4:
+			return true;
+
+		default:
+			return false;
+		}
+	}
+
 	struct Proc
 	{
 		uint8_t argument_sizes[64];
@@ -39,32 +56,66 @@ namespace s22
 	};
 
 	template<typename... TArgs>
-	void
-	add_ins(Backend self, const char *fmt, TArgs &&...args)
+	inline static void
+	instruction(Backend self, const char *fmt, TArgs &&...args)
 	{
 		auto str = std::format(fmt, std::forward<TArgs>(args)...);
 		std::cout << str << std::endl;
-//		self->out_file << str << std::endl;
+		// self->out_file << str << std::endl;
 	}
 
-	Register
+	inline static Operand
 	first_available_register(Backend self)
 	{
-		// TODO: Handle no available registers, overwrite for now
-		for (const auto &reg: self->reg)
+		for (auto &reg: self->reg)
 		{
 			if (reg.is_used == false)
-				return reg;
+				return { .loc = reg.id };
 		}
 
-		return self->reg[Operand::R4];
+		// TODO: Handle no available registers, overwrite for now
+		return { .loc = Operand::R0 };
+	}
+
+	inline static void
+	clear_registers(Backend self)
+	{
+		for (auto &reg: self->reg)
+			reg.is_used = false;
+	}
+
+	inline static void
+	assign(Backend self, Op_Assign op, Operand left, Operand right)
+	{
+		auto src = right;
+		if (op == Op_Assign::MOV)
+		{
+			if (operand_is_register(right) == false)
+			{
+				// Value needs to be passed
+				src = first_available_register(self);
+				instruction(self, "MOV {}, {}", src, right);
+			}
+		}
+		else
+		{
+			// Move into register
+			src = first_available_register(self);
+			instruction(self, "LD {}, {}", src, left);
+			instruction(self, "{} {}, {}, {}", op, src, src, right);
+		}
+
+		// Write result
+		instruction(self, "ST {}, {}", left, src);
+
+		clear_registers(self);
 	}
 
 	Backend
 	backend_instance()
 	{
-		static IBackend be = {};
-		return &be;
+		static IBackend self = {};
+		return &self;
 	}
 
 	void
@@ -91,49 +142,87 @@ namespace s22
 		self->stack_offset.top() += word_count;
 		self->variables[sym] = { .loc = Operand::MEM, .offset = self->stack_offset.top() };
 
-		add_ins(self, "SUB SP, {}", word_count);
+		instruction(self, "SUB SP, #{}", word_count);
 	}
 
 	void
-	backend_assign_array(Backend self, const Expr &left, const Expr *expr)
+	backend_decl_expr(Backend self, const Symbol *sym, Operand right)
 	{
-/*		auto loc = expr->value_loc;
+		backend_decl(self, sym);
+		backend_assign(self, Op_Assign::MOV, sym, right);
+	}
 
-		// Move to register first
-		if (expr->value_loc.kind == Value_Location::MEM)
+	Operand
+	backend_id(Backend self, const Symbol *sym)
+	{
+		return self->variables[sym];
+	}
+
+	Operand
+	backend_array_access(Backend self, const Symbol *sym, Operand right)
+	{
+		auto opr = self->variables[sym];
+		opr.offset -= right.value;
+		return opr;
+	}
+
+	void
+	backend_assign(Backend self, Op_Assign op, const Symbol *sym, Operand right)
+	{
+		assign(self, op, self->variables[sym], right);
+	}
+
+	void
+	backend_array_assign(Backend self, Op_Assign op, Operand left, Operand right)
+	{
+		assign(self, op, left, right);
+	}
+
+	Operand
+	backend_binary(Backend self, Op_Binary op, Operand left, Operand right)
+	{
+		// Collect operands
+		auto opr1 = left;
+		if (opr1.loc == Operand::MEM)
 		{
 			auto reg = first_available_register(self);
-			add_ins(self, "MOV {}, {}", Value_Location{ reg.id }, loc);
-			loc = Value_Location{reg.id};
+			instruction(self, "LD {}, {}", reg, left);
+			opr1 = reg;
 		}
 
-		auto dst_loc = self->variables[left.as_array.sym];
-		dst_loc.offset += left.as_array.index->value_loc.value;
-		add_ins(self, "MOV {}, {}", dst_loc, loc);*/
-	}
-
-	void
-	backend_assign(Backend self, const Expr *left, const Expr *expr)
-	{
-/*		auto loc = expr->value_loc;
-
-		// Move to register first
-		if (expr->value_loc.kind == Value_Location::MEM)
+		auto opr2 = right;
+		if (opr2.loc == Operand::MEM)
 		{
 			auto reg = first_available_register(self);
-			add_ins(self, "MOV {}, {}", Value_Location{ reg.id }, loc);
-			loc = Value_Location{reg.id};
+			instruction(self, "LD {}, {}", reg, right);
+			opr2 = reg;
 		}
 
-		add_ins(self, "MOV {}, {}", self->variables[left->as_id.sym], loc);*/
+		auto dst = first_available_register(self);
+		self->reg[dst.loc].is_used = true;
+
+		instruction(self, "{} {}, {}, {}", op, dst, opr1, opr2);
+
+		return dst;
 	}
 
-	void
-	backend_decl_expr(Backend self, const Symbol *sym, const Expr *expr)
+	Operand
+	backend_unary(Backend self, Op_Unary op, Operand right)
 	{
-/*		backend_decl(self, sym);
-		Expr left = { .as_id = { .sym = (Symbol*)sym }};
-		backend_assign(self, &left, expr);*/
+		auto opr = right;
+		if (opr.loc == Operand::MEM)
+		{
+			auto reg = first_available_register(self);
+			instruction(self, "LD {}, {}", reg, right);
+			opr = reg;
+		}
+
+		auto dst = first_available_register(self);
+		self->reg[dst.loc].is_used = true;
+
+		instruction(self, "{} {}, {}", op, dst, opr);
+
+		return dst;
 	}
 }
 
@@ -155,7 +244,7 @@ struct std::formatter<s22::Operand> : std::formatter<std::string>
 		case Operand::SP: return format_to(ctx.out(), "SP");
 		case Operand::BP: return format_to(ctx.out(), "BP");
 
-		case Operand::IMM: return format_to(ctx.out(), "{}", opr.value);
+		case Operand::IMM: return format_to(ctx.out(), "#{}", opr.value);
 		case Operand::MEM: return format_to(ctx.out(), "-{}(BP)", opr.offset);
 
 		default: return ctx.out();

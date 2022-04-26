@@ -83,6 +83,13 @@ namespace s22
 	{
 		Parse_Unit self = {};
 		self.expr = expr_literal(nullptr, lit, loc, base);
+
+		self.opr = {
+			.loc = Operand::IMM,
+			.size = 1,
+			.value = lit.value
+		};
+
 		return self;
 	}
 
@@ -95,31 +102,49 @@ namespace s22
 		if (self.expr.err)
 			parse_error(self.expr.err);
 
-		return self;
-	}
-
-	Parse_Unit
-	Parser::assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &unit)
-	{
-		Parse_Unit self = {};
-		self.expr = expr_assign(this->current_scope, id.data, loc, unit.expr, op);
-
-		if (self.expr.err && unit.expr.err == false)
-			parse_error(self.expr.err);
+		if (auto sym = scope_get_id(this->current_scope, id.data))
+			self.opr = backend_id(this->backend, sym);
 
 		return self;
 	}
 
 	Parse_Unit
-	Parser::array_assign(const Parse_Unit &left, Source_Location loc, Op_Assign op, const Parse_Unit &right)
+	Parser::array(const Str &id, Source_Location loc, const Parse_Unit &right)
 	{
 		Parse_Unit self = {};
-		self.expr = expr_array_assign(this->current_scope, left.expr, loc, right.expr, op);
+		self.expr = expr_array_access(this->current_scope, id.data, loc, right.expr);
 
 		if (self.expr.err && right.expr.err == false)
 			parse_error(self.expr.err);
 
+		if (auto sym = scope_get_id(this->current_scope, id.data))
+			self.opr = backend_array_access(this->backend, sym, right.opr);
+
 		return self;
+	}
+
+	void
+	Parser::assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &right)
+	{
+		auto expr = expr_assign(this->current_scope, id.data, loc, right.expr, op);
+
+		if (expr.err && right.expr.err == false)
+			parse_error(expr.err);
+
+		if (auto sym = scope_get_id(this->current_scope, id.data))
+			backend_assign(this->backend, op, sym, right.opr);
+	}
+
+	void
+	Parser::array_assign(const Parse_Unit &left, Source_Location loc, Op_Assign op, const Parse_Unit &right)
+	{
+		auto expr = expr_array_assign(this->current_scope, left.expr, loc, right.expr, op);
+
+		if (expr.err && right.expr.err == false)
+			parse_error(expr.err);
+
+		if (expr.err == false)
+			backend_array_assign(this->backend, op, left.opr, right.opr);
 	}
 
 	Parse_Unit
@@ -131,29 +156,23 @@ namespace s22
 		if (self.expr.err && left.expr.err == false && right.expr.err == false)
 			parse_error(self.expr.err);
 
-		return self;
-	}
-
-	Parse_Unit
-	Parser::unary(Op_Unary op, const Parse_Unit &unit, Source_Location loc)
-	{
-		Parse_Unit self = {};
-		self.expr = expr_unary(this->current_scope, unit.expr, loc, op);
-
-		if (self.expr.err && unit.expr.err == false)
-			parse_error(self.expr.err);
+		if (self.expr.err == false)
+			self.opr = backend_binary(this->backend, op, left.opr, right.opr);
 
 		return self;
 	}
 
 	Parse_Unit
-	Parser::array(const Str &id, Source_Location loc, const Parse_Unit &unit)
+	Parser::unary(Op_Unary op, const Parse_Unit &right, Source_Location loc)
 	{
 		Parse_Unit self = {};
-		self.expr = expr_array_access(this->current_scope, id.data, loc, unit.expr);
+		self.expr = expr_unary(this->current_scope, right.expr, loc, op);
 
-		if (self.expr.err && unit.expr.err == false)
+		if (self.expr.err && right.expr.err == false)
 			parse_error(self.expr.err);
+
+		if (self.expr.err == false)
+			self.opr = backend_unary(this->backend, op, right.opr);
 
 		return self;
 	}
@@ -195,59 +214,62 @@ namespace s22
 	void
 	Parser::decl(const Str &id, Source_Location loc, Symbol_Type type)
 	{
-		Symbol sym = { .id = id, .type = type, .defined_at = loc };
+		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
-		auto [_, err] = scope_add_decl(this->current_scope, sym);
+		auto [sym, err] = scope_add_decl(this->current_scope, symbol);
 		if (err)
 		{
 			parse_error(err);
 		}
 
 		if (err == false)
-			backend_decl(this->backend, &sym);
+			backend_decl(this->backend, sym);
 	}
 
 	void
-	Parser::decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit)
+	Parser::decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right)
 	{
-		Symbol sym = { .id = id, .type = type, .defined_at = loc };
+		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
-		auto [_, err] = scope_add_decl(this->current_scope, sym, unit.expr);
-		if (err && unit.expr.err == false)
+		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right.expr);
+		if (err && right.expr.err == false)
 		{
 			parse_error(err);
 		}
 
 		if (err == false)
-			backend_decl_expr(this->backend, &sym, &unit.expr);
+			backend_decl_expr(this->backend, sym, right.opr);
 	}
 
 	void
-	Parser::decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit)
+	Parser::decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right)
 	{
-		Symbol sym = { .id = id, .type = type, .defined_at = loc };
-		sym.type.array = unit.expr.lit.value;
+		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
+		symbol.type.array = right.expr.lit.value;
 
-		auto [_, err] = scope_add_decl(this->current_scope, sym);
-		if (err && unit.expr.err == false)
+		auto [sym, err] = scope_add_decl(this->current_scope, symbol);
+		if (err && right.expr.err == false)
 		{
 			parse_error(err);
 		}
 
 		if (err == false)
-			backend_decl(this->backend, &sym);
+			backend_decl(this->backend, sym);
 	}
 
 	void
-	Parser::decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &unit)
+	Parser::decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right)
 	{
-		Symbol sym = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
+		Symbol symbol = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
 
-		auto [_, err] = scope_add_decl(this->current_scope, sym, unit.expr);
-		if (err && unit.expr.err == false)
+		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right.expr);
+		if (err && right.expr.err == false)
 		{
 			parse_error(err);
 		}
+
+		if (err == false)
+			backend_decl_expr(this->backend, sym, right.opr);
 	}
 
 	void

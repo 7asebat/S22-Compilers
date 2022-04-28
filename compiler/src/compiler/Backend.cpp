@@ -54,7 +54,6 @@ namespace s22
 	{
 		Instruction ins = { op, std::forward<TArgs>(args)... };
 		ins.operand_count = sizeof...(args);
-
 		self->program.push_back(ins);
 	}
 
@@ -65,12 +64,11 @@ namespace s22
 		Instruction ins = { op, std::forward<TArgs>(args)... };
 		ins.operand_count = sizeof...(args);
 		ins.label = label;
-
 		self->program.push_back(ins);
 	}
 
 	inline static bool
-	instruction_is_comparison(INSTRUCTION_OP op)
+	op_is_logical(INSTRUCTION_OP op)
 	{
 		switch (op)
 		{
@@ -92,7 +90,7 @@ namespace s22
 	inline static INSTRUCTION_OP
 	invert_condition(INSTRUCTION_OP op)
 	{
-		if (instruction_is_comparison(op) == false)
+		if (op_is_logical(op) == false)
 			return op;
 
 		switch (op)
@@ -104,11 +102,8 @@ namespace s22
 		case I_LOG_GT:	return I_LOG_LEQ;
 		case I_LOG_GEQ:	return I_LOG_LT;
 
-		// TODO(abdelrahman.farid) verify this
-		case I_LOG_NOT:	return I_BZ;
-		case I_TEST:	return I_BNZ;
-
 		default: // unreachable
+			parser_log(Error{"UNREACHABLE"}, Log_Level::CRITICAL);
 			return I_BR;
 		}
 	}
@@ -148,6 +143,90 @@ namespace s22
 	{
 		for (auto &reg: self->reg)
 			reg.is_used = false;
+	}
+
+	inline static void
+	logical_and(Backend self, Instruction ins, Source_Location loc)
+	{
+		Operand br = { .loc = Operand::LBL };
+
+		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
+		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+
+		// bz $end_if, op1
+		// bz $end_if, op2
+		br.label = end_if;
+		instruction(self, I_BZ, br, ins.src1);
+		instruction(self, I_BZ, br, ins.src2);
+
+		// mov dst, 1
+		instruction(self, I_MOV, ins.dst, OPR_ONE);
+
+		// br $end
+		br.label = end_all;
+		instruction(self, I_BR, br);
+
+		// $end_if: mov dst, 0
+		instruction(self, end_if, I_MOV, ins.dst, OPR_ZERO);
+
+		// $end_all
+		instruction(self, end_all, I_NOP);
+	}
+
+	inline static void
+	logical_or(Backend self, Instruction ins, Source_Location loc)
+	{
+		// a = b || c
+		// a = !(!b && !c)
+		Operand br = { .loc = Operand::LBL };
+
+		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
+		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+
+		// bnz $end_if, op1
+		// bnz $end_if, op2
+		br.label = end_if;
+		instruction(self, I_BNZ, br, ins.src1);
+		instruction(self, I_BNZ, br, ins.src2);
+
+		// mov dst, 0
+		instruction(self, I_MOV, ins.dst, OPR_ZERO);
+
+		// br $end
+		br.label = end_all;
+		instruction(self, I_BR, br);
+
+		// $end_if: mov dst, 1
+		instruction(self, end_if, I_MOV, ins.dst, OPR_ONE);
+
+		// $end_all
+		instruction(self, end_all, I_NOP);
+	}
+
+	inline static void
+	logical_not(Backend self, Instruction ins, Source_Location loc)
+	{
+		Operand br = { .loc = Operand::LBL };
+
+		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
+		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+
+		// bz $end_if, op
+		br.label = end_if;
+		instruction(self, I_BZ, br, ins.src1);
+
+		// mov dst, 1
+		instruction(self, I_MOV, ins.dst, OPR_ONE);
+
+		// br $end
+		br.label = end_all;
+		instruction(self, I_BR, br);
+
+		// $end_if: mov dst, 0
+		instruction(self, end_if, I_MOV, ins.dst, OPR_ZERO);
+
+		// $end_all
+		instruction(self, end_all, I_NOP);
 	}
 
 	inline static void
@@ -308,12 +387,25 @@ namespace s22
 		self->reg[dst.loc].is_used = true;
 
 		// TODO: Add locations for operands
-		if (instruction_is_comparison(op) == false)
+		if (op_is_logical(op) == false)
+		{
 			instruction(self, op, dst, opr1, opr2);
+		}
 		else
 		{
 			Instruction ins = { .op = op, .dst = dst, .src1 = opr1, .src2 = opr2 };
-			compare(self, ins, left.loc);
+			if (op == I_LOG_AND)
+			{
+				logical_and(self, ins, left.loc);
+			}
+			else if (op == I_LOG_OR)
+			{
+				logical_or(self, ins, left.loc);
+			}
+			else
+			{
+				compare(self, ins, left.loc);
+			}
 		}
 
 		if (operand_is_register(opr1))
@@ -336,9 +428,23 @@ namespace s22
 		auto dst = first_available_register(self);
 		self->reg[dst.loc].is_used = true;
 
-		instruction(self, op, dst, opr);
+		if (op_is_logical(op) == false)
+		{
+			instruction(self, op, dst, opr);
+		}
+		else
+		{
+			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = opr };
+			logical_not(self, ins, right.loc);
+		}
 
 		return dst;
+	}
+
+	void
+	backend_condition(Backend self)
+	{
+		// Generate condition
 	}
 }
 
@@ -415,7 +521,7 @@ struct std::formatter<s22::Instruction> : std::formatter<std::string>
 		using namespace s22;
 		switch (ins.op)
 		{
-		case I_NOP: 	return ctx.out();
+		case I_NOP: 	return format_to(ctx.out(), "NOP");
 
 		case I_LD: 		format_to(ctx.out(), "LD"); 	break;
 		case I_ST: 		format_to(ctx.out(), "ST"); 	break;
@@ -440,9 +546,13 @@ struct std::formatter<s22::Instruction> : std::formatter<std::string>
 		case I_LOG_LEQ:	format_to(ctx.out(), "BLE");	break;
 		case I_LOG_EQ:	format_to(ctx.out(), "BEQ");	break;
 		case I_LOG_NEQ:	format_to(ctx.out(), "BNE");	break;
+		case I_LOG_GEQ:	format_to(ctx.out(), "BGE");	break;
+		case I_LOG_GT:	format_to(ctx.out(), "BGT");	break;
 
 		// Branch
 		case I_BR:		format_to(ctx.out(), "BR"); 	break;
+		case I_BZ:		format_to(ctx.out(), "BZ"); 	break;
+		case I_BNZ:		format_to(ctx.out(), "BNZ"); 	break;
 		default: 		return ctx.out();
 		}
 

@@ -315,7 +315,6 @@ expr_logic:
     | expr NEQ expr             { $$ = p->binary(@2, $1, Op_Binary::NEQ,   $3); }
     | expr GEQ expr             { $$ = p->binary(@2, $1, Op_Binary::GEQ,   $3); }
     | expr '>' expr             { $$ = p->binary(@2, $1, Op_Binary::GT,    $3); }
-    /* TODO: Logic AND, Logic OR */
     | expr L_AND expr           { $$ = p->binary(@2, $1, Op_Binary::L_AND, $3); }
     | expr L_OR expr            { $$ = p->binary(@2, $1, Op_Binary::L_OR,  $3); }
     ;

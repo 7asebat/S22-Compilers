@@ -1,6 +1,5 @@
 x: int = 3;
+y: int = 4;
 
-x += 5;
-
-y: bool = x != 0;
+z: bool = !x;
 

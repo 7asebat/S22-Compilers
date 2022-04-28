@@ -5,27 +5,6 @@
 namespace s22
 {
 	void
-	parser_log(const Error &err, Log_Level lvl)
-	{
-		parser_log(err, err.loc, lvl);
-	}
-
-	void
-	parser_log(const Error &err, Source_Location loc, Log_Level lvl)
-	{
-		// Fill with loc if error has none
-		auto msg = std::format("{}: {}", lvl, err);
-
-		if (err.loc != Source_Location{})
-			loc = err.loc;
-
-		yyerror(&loc, nullptr, msg.c_str());
-
-		if (lvl == Log_Level::CRITICAL)
-			exit(-1);
-	}
-
-	void
 	Parser::init()
 	{
 		this->current_scope = &this->global;
@@ -84,11 +63,11 @@ namespace s22
 	Parse_Unit
 	Parser::condition(const Parse_Unit &unit)
 	{
-		// Turn last expression into a condition
-		Parse_Unit self = {};
-		self.expr = unit.expr;
+		Parse_Unit self = unit;
 
 		// TODO: Implement
+		// Turn last expression into a condition
+
 		return self;
 	}
 
@@ -463,6 +442,27 @@ namespace s22
 	Parser::do_while_end(Source_Location loc, const Parse_Unit &cond)
 	{
 		// TODO: Implement
+	}
+
+	void
+	parser_log(const Error &err, Log_Level lvl)
+	{
+		parser_log(err, err.loc, lvl);
+	}
+
+	void
+	parser_log(const Error &err, Source_Location loc, Log_Level lvl)
+	{
+		// Fill with loc if error has none
+		auto msg = std::format("{}: {}", lvl, err);
+
+		if (err.loc != Source_Location{})
+			loc = err.loc;
+
+		yyerror(&loc, nullptr, msg.c_str());
+
+		if (lvl == Log_Level::CRITICAL)
+			exit(-1);
 	}
 }
 

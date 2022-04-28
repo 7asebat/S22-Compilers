@@ -119,4 +119,7 @@ namespace s22
 
 	Operand
 	backend_unary(Backend self, INSTRUCTION_OP op, const Parse_Unit &right);
+
+	void
+	backend_condition(Backend self);
 }

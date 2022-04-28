@@ -177,7 +177,7 @@ namespace s22
 				auto &sym = std::get<Symbol>(entry);
 
 				if (sym.is_used == false)
-					parse_error(Error{sym.defined_at, "unused identifier"}, Error_Level::WARNING);
+					parser_log(Error{ sym.defined_at, "unused identifier" }, Log_Level::WARNING);
 			}
 		}
 		auto inner = self;

@@ -16,7 +16,7 @@
 | `OP`    | `Rx` | `V`    |        | `Rx = op V`                                       |
 | `OP`    | `Rx` | `V1`   | `V2`   | `Rx = V1 op V2`                                   |
 | `BR`    | `L`  |        |        | Branch to `L`                                     |
-| `Bcond` | `L`  | `V1`   |        | Branch to `L` on `cond V1`                        |
-| `Bcond` | `L`  | `V1`   | `V2`   | Branch to `L` on `V1 cond V2`                     |
+| `Bcond` | `L`  | `V1`   |        | Branch to `L` on `comp V1`                        |
+| `Bcond` | `L`  | `V1`   | `V2`   | Branch to `L` on `V1 comp V2`                     |
 | `CALL`  | `F`  |        |        | Push return address onto stack, branch to `F`     |
 | `RET`   |      |        |        | Pop return address and branch to it               |

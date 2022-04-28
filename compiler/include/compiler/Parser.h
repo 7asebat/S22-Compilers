@@ -13,6 +13,7 @@ namespace s22
 	{
 		Expr expr;
 		Operand opr;
+		Comparison comp;
 	};
 
 	struct Parser
@@ -91,23 +92,50 @@ namespace s22
 		void
 		decl_proc_end(const Str &id, Symbol_Type return_type);
 
-		void
-		switch_begin(const Parse_Unit &unit);
+		Parse_Unit
+		condition(const Parse_Unit &unit);
 
 		void
-		switch_end();
+		if_begin(const Parse_Unit &cond, Source_Location loc);
 
 		void
-		switch_case_begin();
+		else_if_begin(const Parse_Unit &cond, Source_Location loc);
 
 		void
-		switch_case_end();
+		else_begin(Source_Location loc);
+
+		void
+		if_end(Source_Location loc);
+
+		void
+		switch_begin(const Parse_Unit &unit, Source_Location loc);
+
+		void
+		switch_end(Source_Location loc);
+
+		void
+		switch_case_begin(Source_Location loc);
+
+		void
+		switch_case_end(Source_Location loc);
 
 		void
 		switch_case_add(const Parse_Unit &unit);
 
 		void
 		switch_default(Source_Location loc);
+
+		void
+		while_begin(const Parse_Unit &cond, Source_Location loc);
+
+		void
+		while_end(Source_Location loc);
+
+		void
+		do_while_begin(Source_Location loc);
+
+		void
+		do_while_end(const Parse_Unit &cond, Source_Location loc);
 
 		Scope global;
 		Scope *current_scope;
@@ -149,7 +177,7 @@ namespace s22
 		Backend backend;
 	};
 
-	enum class Error_Level
+	enum class Log_Level
 	{
 		INFO,
 		WARNING,
@@ -157,7 +185,7 @@ namespace s22
 	};
 
 	void
-	parse_error(const Error &err, Error_Level lvl = Error_Level::ERROR);
+	parser_log(const Error &err, Log_Level lvl = Log_Level::ERROR);
 }
 
 void

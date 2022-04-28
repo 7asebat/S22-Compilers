@@ -77,10 +77,32 @@ namespace s22
 
 		Expr self = { .loc = loc };
 
-		if (op < Op_Binary::LOGICAL)
+		switch (op)
+		{
+		case Op_Binary::ADD:
+		case Op_Binary::SUB:
+		case Op_Binary::MUL:
+		case Op_Binary::DIV:
+		case Op_Binary::MOD:
+		case Op_Binary::AND:
+		case Op_Binary::OR:
+		case Op_Binary::XOR:
+		case Op_Binary::SHL:
+		case Op_Binary::SHR:
 			self.type = left.type;
-		else
+			break;
+
+		case Op_Binary::LT:
+		case Op_Binary::LEQ:
+		case Op_Binary::EQ:
+		case Op_Binary::NEQ:
+		case Op_Binary::GT:
+		case Op_Binary::GEQ:
+		case Op_Binary::L_AND:
+		case Op_Binary::L_OR:
 			self.type = SYMTYPE_BOOL;
+			break;
+		}
 
 		return self;
 	}

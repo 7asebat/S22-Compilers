@@ -1,29 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
   <Type Name="compiler::Expr">
-    <DisplayString Condition="kind == compiler::Expr::LITERAL">{{LITERAL={as_literal.value}}}</DisplayString>
-    <DisplayString Condition="kind == compiler::Expr::IDENTIFIER">{{ID={as_id.name}}}</DisplayString>
-    <DisplayString Condition="kind == compiler::Expr::OP_BINARY">{{BINARY={as_binary.kind}}}</DisplayString>
-    <DisplayString Condition="kind == compiler::Expr::OP_UNARY">{{UNARY={as_unary.kind}}}</DisplayString>
-    <DisplayString Condition="kind == compiler::Expr::OP_ASSIGN">{{ASSIGNMENT={as_assign.kind}}}</DisplayString>
+    <DisplayString Comparison="kind == compiler::Expr::LITERAL">{{LITERAL={as_literal.value}}}</DisplayString>
+    <DisplayString Comparison="kind == compiler::Expr::IDENTIFIER">{{ID={as_id.name}}}</DisplayString>
+    <DisplayString Comparison="kind == compiler::Expr::OP_BINARY">{{BINARY={as_binary.kind}}}</DisplayString>
+    <DisplayString Comparison="kind == compiler::Expr::OP_UNARY">{{UNARY={as_unary.kind}}}</DisplayString>
+    <DisplayString Comparison="kind == compiler::Expr::OP_ASSIGN">{{ASSIGNMENT={as_assign.kind}}}</DisplayString>
 
     <Expand>
-      <ExpandedItem Condition="kind == compiler::Expr::LITERAL">as_literal</ExpandedItem>
-      <ExpandedItem Condition="kind == compiler::Expr::IDENTIFIER">as_id</ExpandedItem>
-      <ExpandedItem Condition="kind == compiler::Expr::OP_BINARY">as_binary</ExpandedItem>
-      <ExpandedItem Condition="kind == compiler::Expr::OP_UNARY">as_unary</ExpandedItem>
-      <ExpandedItem Condition="kind == compiler::Expr::OP_ASSIGN">as_assign</ExpandedItem>
+      <ExpandedItem Comparison="kind == compiler::Expr::LITERAL">as_literal</ExpandedItem>
+      <ExpandedItem Comparison="kind == compiler::Expr::IDENTIFIER">as_id</ExpandedItem>
+      <ExpandedItem Comparison="kind == compiler::Expr::OP_BINARY">as_binary</ExpandedItem>
+      <ExpandedItem Comparison="kind == compiler::Expr::OP_UNARY">as_unary</ExpandedItem>
+      <ExpandedItem Comparison="kind == compiler::Expr::OP_ASSIGN">as_assign</ExpandedItem>
     </Expand>
   </Type>
 
   <Type Name="std::variant&lt;compiler::Symbol,compiler::Scope&gt;">
     <Intrinsic Name="index" Expression="(int)_Which"/>
-    <DisplayString Condition="_Which == 0">SYMBOL={{{_Head}}}</DisplayString>
-    <DisplayString Condition="_Which == 1">SCOPE={{{_Tail._Head}}}</DisplayString>
+    <DisplayString Comparison="_Which == 0">SYMBOL={{{_Head}}}</DisplayString>
+    <DisplayString Comparison="_Which == 1">SCOPE={{{_Tail._Head}}}</DisplayString>
 
     <Expand>
-      <ExpandedItem Condition="_Which == 0">_Head</ExpandedItem>
-      <ExpandedItem Condition="_Which == 1">_Tail._Head</ExpandedItem>
+      <ExpandedItem Comparison="_Which == 0">_Head</ExpandedItem>
+      <ExpandedItem Comparison="_Which == 1">_Tail._Head</ExpandedItem>
     </Expand>
 
   </Type>

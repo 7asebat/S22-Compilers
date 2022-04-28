@@ -21,47 +21,45 @@ namespace s22
 		enum KIND { VARIABLE, LITERAL } kind;
 
 		Symbol_Type type;
-		Source_Location loc;
 
 		// Optional literal value
 		Literal lit;
 
-		// Optional error
+		Source_Location loc;
 		Error err;
 	};
 
 	enum class Op_Assign
 	{
-		MOV, // A = B
+		MOV = I_MOV, // A = B
 
-		ADD, // A += B
-		SUB, // A -= B
-		MUL, // A *= B
-		DIV, // A /= B
-		MOD, // A %= B
+		ADD = I_ADD, // A += B
+		SUB = I_SUB, // A -= B
+		MUL = I_MUL, // A *= B
+		DIV = I_DIV, // A /= B
+		MOD = I_MOD, // A %= B
 
-		AND, // A &= B
-		OR,  // A |= B
-		XOR, // A ^= B
-		SHL, // A <<= B
-		SHR, // A >>= B
+		AND = I_AND, // A &= B
+		OR  = I_OR,  // A |= B
+		XOR = I_XOR, // A ^= B
+		SHL = I_SHL, // A <<= B
+		SHR = I_SHR, // A >>= B
 	};
 
 	enum class Op_Binary
 	{
-		ADD, // A + B
-		SUB, // A - B
-		MUL, // A * B
-		DIV, // A / B
-		MOD, // A % B
+		ADD = I_ADD, // A + B
+		SUB = I_SUB, // A - B
+		MUL = I_MUL, // A * B
+		DIV = I_DIV, // A / B
+		MOD = I_MOD, // A % B
 
-		AND, // A & B
-		OR,  // A | B
-		XOR, // A ^ B
-		SHL, // A << B
-		SHR, // A >> B
+		AND = I_AND, // A & B
+		OR  = I_OR,  // A | B
+		XOR = I_XOR, // A ^ B
+		SHL = I_SHL, // A << B
+		SHR = I_SHR, // A >> B
 
-		LOGICAL,
 		LT,  // A < B
 		LEQ, // A <= B
 
@@ -72,19 +70,19 @@ namespace s22
 		GEQ, // A >= B
 
 		L_AND,  // A && B
-		L_OR,    // A || B
+		L_OR,   // A || B
 	};
 
 	enum class Op_Unary
 	{
 		// Mathematical
-		NEG, // -A
+		NEG = I_NEG, // -A
 
 		// Binary
-		INV, // ~A
+		INV = I_INV, // ~A
 
 		// Logical
-		NOT, // !A
+		NOT = I_INV+1, // !A
 	};
 
 	Expr

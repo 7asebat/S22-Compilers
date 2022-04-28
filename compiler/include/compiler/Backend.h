@@ -7,12 +7,15 @@ namespace s22
 	using Backend = IBackend*;
 
 	struct Symbol;
-	struct Expr;
+	struct Parse_Unit;
 
 	enum INSTRUCTION_OP
 	{
+		// Used for labels
+		I_NOP,
+
 		I_LD, I_ST, I_MOV,
-		I_TEST, I_BZ, I_BNZ,
+		I_TEST, I_BR, I_BZ, I_BNZ,
 
 		// Binary
 		I_ADD, I_SUB, I_MUL, I_DIV, I_MOD, I_AND, I_OR, I_XOR, I_SHL, I_SHR,
@@ -35,7 +38,7 @@ namespace s22
 			NONE,
 			LABEL,
 
-			END_IF, END_ELSE, END_ELSEIF,
+			END_IF, END_ELSEIF, END_ALL,
 			END_CASE, END_SWITCH,
 
 			FOR, END_FOR,
@@ -44,7 +47,7 @@ namespace s22
 			PROC,
 		};
 		TYPE type;
-		size_t line, col;
+		int line, col;
 	};
 
 	// Temporary register
@@ -84,15 +87,6 @@ namespace s22
 		};
 	};
 
-	struct Comparison
-	{
-		// !left checks for left == 0
-		// left  checks for left != 0
-		INSTRUCTION_OP op;
-		Operand left, right;
-	};
-
-
 	Backend
 	backend_instance();
 
@@ -106,26 +100,23 @@ namespace s22
 	backend_decl(Backend self, const Symbol *sym);
 
 	void
-	backend_decl_expr(Backend self, const Symbol *sym, Operand right);
+	backend_decl_expr(Backend self, const Symbol *sym, const Parse_Unit &right);
 
 	Operand
 	backend_id(Backend self, const Symbol *sym);
 
 	Operand
-	backend_array_access(Backend self, const Symbol *sym, Operand right);
+	backend_array_access(Backend self, const Symbol *sym, const Parse_Unit &right);
 
 	void
-	backend_assign(Backend self, INSTRUCTION_OP op, const Symbol *sym, Operand right);
+	backend_assign(Backend self, INSTRUCTION_OP op, const Symbol *sym, const Parse_Unit &right);
 
 	void
-	backend_array_assign(Backend self, INSTRUCTION_OP op, Operand left, Operand right);
+	backend_array_assign(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right);
 
 	Operand
-	backend_binary(Backend self, INSTRUCTION_OP op, Operand left, Operand right);
+	backend_binary(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right);
 
 	Operand
-	backend_unary(Backend self, INSTRUCTION_OP op, Operand right);
-
-	Comparison
-	backend_condition(Backend self);
+	backend_unary(Backend self, INSTRUCTION_OP op, const Parse_Unit &right);
 }

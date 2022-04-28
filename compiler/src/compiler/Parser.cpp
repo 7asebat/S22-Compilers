@@ -4,23 +4,25 @@
 
 namespace s22
 {
-	constexpr const char *
-	errlvl_to_str(Log_Level lvl)
-	{
-		switch (lvl)
-		{
-		case Log_Level::INFO:    return "INFO";
-		case Log_Level::ERROR:   return "ERROR";
-		case Log_Level::WARNING: return "WARNING";
-		default:                 return "UNREACHABLE";
-		}
-	}
-
 	void
 	parser_log(const Error &err, Log_Level lvl)
 	{
+		parser_log(err, err.loc, lvl);
+	}
+
+	void
+	parser_log(const Error &err, Source_Location loc, Log_Level lvl)
+	{
+		// Fill with loc if error has none
 		auto msg = std::format("{}: {}", lvl, err);
-		yyerror(&err.loc, nullptr, msg.c_str());
+
+		if (err.loc != Source_Location{})
+			loc = err.loc;
+
+		yyerror(&loc, nullptr, msg.c_str());
+
+		if (lvl == Log_Level::CRITICAL)
+			exit(-1);
 	}
 
 	void
@@ -62,7 +64,7 @@ namespace s22
 		auto err = scope_return_is_valid(this->current_scope, SYMTYPE_VOID);
 		if (err)
 		{
-			parser_log(Error{ loc, err });
+			parser_log(err, loc);
 		}
 	}
 
@@ -73,11 +75,9 @@ namespace s22
 		auto &expr = unit.expr;
 		auto err = scope_return_is_valid(this->current_scope, expr.type);
 
-		if (err)
+		if (err && unit.err == false) // Limit error propagation
 		{
-			if (expr.err == false) // Limit error propagation
-				parser_log(Error{ expr.loc, err });
-			return;
+			parser_log(err, unit.loc);
 		}
 	}
 
@@ -87,35 +87,42 @@ namespace s22
 		// Turn last expression into a condition
 		Parse_Unit self = {};
 		self.expr = unit.expr;
-		self.comp = backend_condition(this->backend);
+
+		// TODO: Implement
 		return self;
 	}
 
 	void
-	Parser::if_begin(const Parse_Unit &cond, Source_Location loc)
+	Parser::if_begin(Source_Location loc, const Parse_Unit &cond)
 	{
+		// TODO: Implement
 	}
 
 	void
-	Parser::else_if_begin(const Parse_Unit &cond, Source_Location loc)
+	Parser::else_if_begin(Source_Location loc, const Parse_Unit &cond)
 	{
+		// TODO: Implement
 	}
 
 	void
 	Parser::else_begin(Source_Location loc)
 	{
+		// TODO: Implement
 	}
 
 	void
 	Parser::if_end(Source_Location loc)
 	{
+		// TODO: Implement
 	}
 
 	Parse_Unit
-	Parser::literal(Literal lit, Source_Location loc, Symbol_Type::BASE base)
+	Parser::literal(Source_Location loc, Literal lit, Symbol_Type::BASE base)
 	{
-		Parse_Unit self = {};
-		self.expr = expr_literal(nullptr, lit, loc, base);
+		Parse_Unit self = { .loc = loc };
+
+		auto [expr, _] = expr_literal(nullptr, lit, base);
+		self.expr = expr;
 
 		self.opr = {
 			.loc = Operand::IMM,
@@ -127,13 +134,21 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::id(const Str &id, Source_Location loc)
+	Parser::id(Source_Location loc, const Str &id)
 	{
-		Parse_Unit self = {};
-		self.expr = expr_identifier(this->current_scope, id.data, loc);
+		Parse_Unit self = { .loc = loc };
+		self.loc = loc;
 
-		if (self.expr.err)
-			parser_log(self.expr.err);
+		if (auto [expr, err] = expr_identifier(this->current_scope, id.data); err)
+		{
+			self.err = Error{loc, err};
+
+			parser_log(err, loc);
+		}
+		else
+		{
+			self.expr = expr;
+		}
 
 		if (auto sym = scope_get_id(this->current_scope, id.data))
 			self.opr = backend_id(this->backend, sym);
@@ -142,70 +157,90 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::array(const Str &id, Source_Location loc, const Parse_Unit &right)
+	Parser::array(Source_Location loc, const Str &id, const Parse_Unit &right)
 	{
-		Parse_Unit self = {};
-		self.expr = expr_array_access(this->current_scope, id.data, loc, right.expr);
+		Parse_Unit self = { .loc = loc };
+		if (auto [expr, err] = expr_array_access(this->current_scope, id.data, right); err)
+		{
+			self.err = Error{loc, err};
 
-		if (self.expr.err && right.expr.err == false)
-			parser_log(self.expr.err);
+			if (right.err == false)
+				parser_log(err, loc);
+		}
+		else
+		{
+			self.expr = expr;
+		}
 
 		if (auto sym = scope_get_id(this->current_scope, id.data))
-			self.opr = backend_array_access(this->backend, sym, right.opr);
+			self.opr = backend_array_access(this->backend, sym, right);
 
 		return self;
 	}
 
 	void
-	Parser::assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &right)
+	Parser::assign(Source_Location loc, const Str &id, Op_Assign op, const Parse_Unit &right)
 	{
-		auto expr = expr_assign(this->current_scope, id.data, loc, right.expr, op);
-
-		if (expr.err && right.expr.err == false)
-			parser_log(expr.err);
+		if (auto [expr, err] = expr_assign(this->current_scope, id.data, right, op); err)
+		{
+			if (right.err == false)
+				parser_log(err, loc);
+		}
 
 		if (auto sym = scope_get_id(this->current_scope, id.data))
-			backend_assign(this->backend, (INSTRUCTION_OP)op, sym, right.opr);
+			backend_assign(this->backend, (INSTRUCTION_OP)op, sym, right);
 	}
 
 	void
-	Parser::array_assign(const Parse_Unit &left, Source_Location loc, Op_Assign op, const Parse_Unit &right)
+	Parser::array_assign(Source_Location loc, const Parse_Unit &left, Op_Assign op, const Parse_Unit &right)
 	{
-		auto expr = expr_array_assign(this->current_scope, left.expr, loc, right.expr, op);
-
-		if (expr.err && right.expr.err == false)
-			parser_log(expr.err);
-
-		if (expr.err == false)
-			backend_array_assign(this->backend, (INSTRUCTION_OP)op, left.opr, right.opr);
+		if (auto [expr, err] = expr_array_assign(this->current_scope, left, right, op); err)
+		{
+			if (right.err == false)
+				parser_log(err, loc);
+		}
+		else
+		{
+			backend_array_assign(this->backend, (INSTRUCTION_OP)op, left, right);
+		}
 	}
 
 	Parse_Unit
-	Parser::binary(const Parse_Unit &left, Source_Location loc, Op_Binary op, const Parse_Unit &right)
+	Parser::binary(Source_Location loc, const Parse_Unit &left, Op_Binary op, const Parse_Unit &right)
 	{
-		Parse_Unit self = {};
-		self.expr = expr_binary(this->current_scope, left.expr, loc, right.expr, op);
+		Parse_Unit self = { .loc = loc };
+		if (auto [expr, err] = expr_binary(this->current_scope, left, right, op); err)
+		{
+			self.err = Error{loc, err};
 
-		if (self.expr.err && left.expr.err == false && right.expr.err == false)
-			parser_log(self.expr.err);
-
-		if (self.expr.err == false)
-			self.opr = backend_binary(this->backend, (INSTRUCTION_OP)op, left.opr, right.opr);
+			if (left.err == false && right.err == false)
+				parser_log(err, loc);
+		}
+		else
+		{
+			self.expr = expr;
+			self.opr = backend_binary(this->backend, (INSTRUCTION_OP)op, left, right);
+		}
 
 		return self;
 	}
 
 	Parse_Unit
-	Parser::unary(Op_Unary op, const Parse_Unit &right, Source_Location loc)
+	Parser::unary(Source_Location loc, Op_Unary op, const Parse_Unit &right)
 	{
-		Parse_Unit self = {};
-		self.expr = expr_unary(this->current_scope, right.expr, loc, op);
+		Parse_Unit self = { .loc = loc };
+		if (auto [expr, err] = expr_unary(this->current_scope, right, op); err)
+		{
+			self.err = Error{loc, err};
 
-		if (self.expr.err && right.expr.err == false)
-			parser_log(self.expr.err);
-
-		if (self.expr.err == false)
-			self.opr = backend_unary(this->backend, (INSTRUCTION_OP)op, right.opr);
+			if (right.err == false)
+				parser_log(err, loc);
+		}
+		else
+		{
+			self.expr = expr;
+			self.opr = backend_unary(this->backend, (INSTRUCTION_OP)op, right);
+		}
 
 		return self;
 	}
@@ -220,24 +255,37 @@ namespace s22
 	Parser::pcall_add(const Parse_Unit &unit)
 	{
 		auto &list = this->proc_call_arguments_stack.top();
-		list.push_back(unit.expr);
+		list.push_back(unit);
 	}
 
 	Parse_Unit
-	Parser::pcall(const Str &id, Source_Location loc)
+	Parser::pcall(Source_Location loc, const Str &id)
 	{
 		auto &list = this->proc_call_arguments_stack.top();
-		auto params = Buf<Expr>{list.data(), list.size()};
+		Buf<Parse_Unit> params = { .data = list.data(), .count = list.size() };
 
-		Parse_Unit self = {};
-		self.expr = expr_proc_call(this->current_scope, id.data, loc, params);
+		Parse_Unit self = { .loc = loc };
+		if (auto [expr, err] = expr_proc_call(this->current_scope, id.data, params); err)
+		{
+			self.err = Error{loc, err};
 
-		bool unique_error = true;
-		for (const auto &expr : params)
-			unique_error &= expr.err == false;
+			bool unique_error = true;
+			for (const auto &unit : params)
+			{
+				if (unit.err)
+				{
+					unique_error = false;
+					break;
+				}
+			}
 
-		if (self.expr.err && unique_error)
-			parser_log(self.expr.err);
+			if (unique_error)
+				parser_log(err, loc);
+		}
+		else
+		{
+			self.expr = expr;
+		}
 
 		this->proc_call_arguments_stack.pop();
 
@@ -245,14 +293,14 @@ namespace s22
 	}
 
 	void
-	Parser::decl(const Str &id, Source_Location loc, Symbol_Type type)
+	Parser::decl(Source_Location loc, const Str &id, Symbol_Type type)
 	{
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
 		auto [sym, err] = scope_add_decl(this->current_scope, symbol);
 		if (err)
 		{
-			parser_log(err);
+			parser_log(err, loc);
 		}
 
 		if (err == false)
@@ -260,30 +308,30 @@ namespace s22
 	}
 
 	void
-	Parser::decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right)
+	Parser::decl_expr(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
-		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right.expr);
-		if (err && right.expr.err == false)
+		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right);
+		if (err && right.err == false)
 		{
-			parser_log(err);
+			parser_log(err, loc);
 		}
 
 		if (err == false)
-			backend_decl_expr(this->backend, sym, right.opr);
+			backend_decl_expr(this->backend, sym, right);
 	}
 
 	void
-	Parser::decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right)
+	Parser::decl_array(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 		symbol.type.array = right.expr.lit.value;
 
 		auto [sym, err] = scope_add_decl(this->current_scope, symbol);
-		if (err && right.expr.err == false)
+		if (err && right.err == false)
 		{
-			parser_log(err);
+			parser_log(err, loc);
 		}
 
 		if (err == false)
@@ -291,22 +339,22 @@ namespace s22
 	}
 
 	void
-	Parser::decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right)
+	Parser::decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
 
-		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right.expr);
-		if (err && right.expr.err == false)
+		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right);
+		if (err && right.err == false)
 		{
-			parser_log(err);
+			parser_log(err, loc);
 		}
 
 		if (err == false)
-			backend_decl_expr(this->backend, sym, right.opr);
+			backend_decl_expr(this->backend, sym, right);
 	}
 
 	void
-	Parser::decl_proc_begin(const Str &id, Source_Location loc)
+	Parser::decl_proc_begin(Source_Location loc, const Str &id)
 	{
 		Symbol sym = {
 			.id = id,
@@ -317,7 +365,7 @@ namespace s22
 		auto [_, err] = scope_add_decl(this->current_scope, sym);
 		if (err)
 		{
-			parser_log(err);
+			parser_log(err, loc);
 		}
 	}
 
@@ -326,17 +374,17 @@ namespace s22
 	{
 		auto sym = scope_get_id(this->current_scope->parent_scope, id.data);
 		if (sym == nullptr)
-			return parser_log(Error{ "UNREACHABLE" });
+			parser_log(Error{ "UNREACHABLE" }, Log_Level::CRITICAL);
 
 		sym->type.procedure = scope_make_proc(this->current_scope, return_type);
 		this->current_scope->procedure = return_type;
 	}
 
 	void
-	Parser::switch_begin(const Parse_Unit &unit, Source_Location loc)
+	Parser::switch_begin(Source_Location loc, const Parse_Unit &unit)
 	{
 		if (symtype_is_integral(unit.expr.type) == false)
-			return parser_log(Error{ unit.expr.loc, "invalid type" });
+			return parser_log(Error{ unit.loc, "invalid type" });
 
 		// Start building the partitioned set
 		this->switch_current_partition = 0;
@@ -370,8 +418,8 @@ namespace s22
 
 		if (expr.kind != Expr::LITERAL || symtype_is_integral(expr.type) == false)
 		{
-			if (expr.err == false)
-				parser_log(Error{ expr.loc, "invalid case" });
+			if (unit.err == false)
+				parser_log(Error{ unit.loc, "invalid case" });
 
 			return;
 		}
@@ -379,7 +427,7 @@ namespace s22
 		// Insert into the partition
 		Switch_Case swc = { .value = expr.lit.value, .partition = this->switch_current_partition };
 		if (this->switch_cases.contains(swc))
-			return parser_log(Error{ expr.loc, "duplicate case" });
+			return parser_log(Error{ unit.loc, "duplicate case" });
 
 		this->switch_cases.insert(swc);
 	}
@@ -391,6 +439,30 @@ namespace s22
 			return parser_log(Error{ loc, "duplicate default" });
 
 		this->switch_cases.insert(SWC_DEFAULT);
+	}
+
+	void
+	Parser::while_begin(Source_Location loc, const Parse_Unit &cond)
+	{
+		// TODO: Implement
+	}
+
+	void
+	Parser::while_end(Source_Location loc)
+	{
+		// TODO: Implement
+	}
+
+	void
+	Parser::do_while_begin(Source_Location loc)
+	{
+		// TODO: Implement
+	}
+
+	void
+	Parser::do_while_end(Source_Location loc, const Parse_Unit &cond)
+	{
+		// TODO: Implement
 	}
 }
 
@@ -441,6 +513,17 @@ struct std::formatter<s22::Log_Level> : std::formatter<std::string>
 	auto
 	format(s22::Log_Level lvl, format_context &ctx)
 	{
-		return format_to(ctx.out(), "{}", s22::errlvl_to_str(lvl));
+		const char *str = "UNREACHABLE";
+		switch (lvl)
+		{
+		case s22::Log_Level::INFO:    str = "INFO"; break;
+		case s22::Log_Level::ERROR:   str = "ERROR"; break;
+		case s22::Log_Level::WARNING: str = "WARNING"; break;
+
+		default:
+			break;
+		}
+
+		return format_to(ctx.out(), "{}", str);
 	}
 };

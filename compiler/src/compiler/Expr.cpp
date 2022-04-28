@@ -1,18 +1,12 @@
 #include "compiler/Expr.h"
+#include "compiler/Parser.h"
 
 namespace s22
 {
-	Expr
-	expr_error(const Error &err, Source_Location loc)
+	Result<Expr>
+	expr_literal(Scope *scope, Literal lit, Symbol_Type::BASE base)
 	{
-		Expr self = { .loc = loc, .err = err };
-		return self;
-	}
-
-	Expr
-	expr_literal(Scope *scope, Literal lit, Source_Location loc, Symbol_Type::BASE base)
-	{
-		Expr self = { .loc = loc };
+		Expr self = {};
 		self.type = { .base = base };
 
 		self.kind = Expr::LITERAL;
@@ -21,61 +15,61 @@ namespace s22
 		return self;
 	}
 
-	Expr
-	expr_identifier(Scope *scope, const char *id, Source_Location loc)
+	Result<Expr>
+	expr_identifier(Scope *scope, const char *id)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
-			return expr_error(Error{ loc, "undeclared identifier" }, loc);
+			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
-		Expr self = { .loc = loc };
+		Expr self = {};
 		self.type = sym->type;
 		return self;
 	}
 
-	Expr
-	expr_assign(Scope *scope, const char *id, Source_Location loc, const Expr &right, Op_Assign op)
+	Result<Expr>
+	expr_assign(Scope *scope, const char *id, const Parse_Unit &right, Op_Assign op)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
-			return expr_error(Error{ loc, "undeclared identifier" }, loc);
+			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
-		if (sym->type != right.type)
-			return expr_error(Error{ right.loc, "type mismatch" }, loc);
+		if (sym->type != right.expr.type)
+			return Error{ "type mismatch" };
 
 		if (sym->is_constant || sym->type.procedure)
-			return expr_error(Error{ loc, "assignment to constant" }, loc);
+			return Error{ "assignment to constant" };
 
 		sym->is_set = true;
 
-		Expr self = { .loc = loc };
+		Expr self = {};
 		self.type = sym->type;
 		return self;
 	}
 
-	Expr
-	expr_array_assign(Scope *scope, const Expr &left, Source_Location loc, const Expr &right, Op_Assign op)
+	Result<Expr>
+	expr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Assign op)
 	{
-		if (left.type != right.type)
-			return expr_error(Error{ right.loc, "type mismatch" }, loc);
+		if (left.expr.type != right.expr.type)
+			return Error{ "type mismatch" };
 
-		Expr self = { .loc = loc };
-		self.type = left.type;
+		Expr self = {};
+		self.type = left.expr.type;
 		return self;
 	}
 
-	Expr
-	expr_binary(Scope *scope, const Expr &left, Source_Location loc, const Expr &right, Op_Binary op)
+	Result<Expr>
+	expr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Binary op)
 	{
-		if (left.type != right.type)
-			return expr_error(Error{ right.loc, "type mismatch" }, loc);
+		if (left.expr.type != right.expr.type)
+			return Error{ "type mismatch" };
 
-		if (symtype_allows_arithmetic(left.type) == false)
-			return expr_error(Error{ right.loc, "invalid operand" }, loc);
+		if (symtype_allows_arithmetic(left.expr.type) == false)
+			return Error{ left.loc, "invalid operand" };
 
-		Expr self = { .loc = loc };
+		Expr self = {};
 
 		switch (op)
 		{
@@ -89,7 +83,7 @@ namespace s22
 		case Op_Binary::XOR:
 		case Op_Binary::SHL:
 		case Op_Binary::SHR:
-			self.type = left.type;
+			self.type = left.expr.type;
 			break;
 
 		case Op_Binary::LT:
@@ -107,64 +101,64 @@ namespace s22
 		return self;
 	}
 
-	Expr
-	expr_unary(Scope *scope, const Expr &right, Source_Location loc, Op_Unary op)
+	Result<Expr>
+	expr_unary(Scope *scope, const Parse_Unit &right, Op_Unary op)
 	{
-		if (symtype_allows_arithmetic(right.type) == false)
-			return expr_error(Error{ right.loc, "invalid operand" }, loc);
+		if (symtype_allows_arithmetic(right.expr.type) == false)
+			return Error{ right.loc, "invalid operand" };
 
-		Expr self = { .loc = loc };
+		Expr self = {};
 
 		if (op != Op_Unary::NOT)
-			self.type = right.type;
+			self.type = right.expr.type;
 		else
 			self.type = SYMTYPE_BOOL;
 
 		return self;
 	}
 
-	Expr
-	expr_array_access(Scope *scope, const char *id, Source_Location loc, const Expr &expr)
+	Result<Expr>
+	expr_array_access(Scope *scope, const char *id, const Parse_Unit &expr)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
-			return expr_error(Error{ loc, "undeclared identifier" }, loc);
+			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
 		if (sym->type.array == false)
-			return expr_error(Error{ loc, "type cannot be indexed" }, loc);
+			return Error{ "type cannot be indexed" };
 
-		if (symtype_is_integral(expr.type) == false)
-			return expr_error(Error{ expr.loc, "invalid index" }, loc);
+		if (symtype_is_integral(expr.expr.type) == false)
+			return Error{ expr.loc, "invalid index" };
 
-		Expr self = { .loc = loc };
+		Expr self = {};
 		self.type = sym->type;
 		self.type.array = 0;
 
 		return self;
 	}
 
-	Expr
-	expr_proc_call(Scope *scope, const char *id, Source_Location loc, Buf<Expr> params)
+	Result<Expr>
+	expr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
-			return expr_error(Error{ loc, "undeclared identifier" }, loc);
+			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
 		if (sym->type.procedure == false)
-			return expr_error(Error{ loc, "type is not callable" }, loc);
+			return Error{ "type is not callable" };
 
 		if (sym->type.procedure->parameters.count != params.count)
-			return expr_error(Error{ loc, "invalid argument count" }, loc);
+			return Error{ "invalid argument count" };
 
 		for (size_t i = 0; i < params.count; i++)
 		{
-			if (params[i].type != sym->type.procedure->parameters[i])
-				return expr_error(Error{ params[i].loc, "invalid argument" }, loc);
+			if (params[i].expr.type != sym->type.procedure->parameters[i])
+				return Error{ params[i].loc, "invalid argument" };
 		}
 
-		Expr self { .loc = loc };
+		Expr self {};
 		self.type = sym->type.procedure->return_type | SYMTYPE_VOID;
 
 		return self;

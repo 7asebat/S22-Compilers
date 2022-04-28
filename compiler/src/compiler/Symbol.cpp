@@ -116,12 +116,12 @@ namespace s22
 	}
 
 	Result<Symbol *>
-	scope_add_decl(Scope *self, const Symbol &symbol, const Expr &expr)
+	scope_add_decl(Scope *self, const Symbol &symbol, const Parse_Unit &expr)
 	{
 		if (expr.err)
 			return expr.err;
 
-		if (symbol.type != expr.type)
+		if (symbol.type != expr.expr.type)
 			return Error{expr.loc, "type mismatch"};
 
 		auto [sym, sym_err] = scope_add_decl(self, symbol);

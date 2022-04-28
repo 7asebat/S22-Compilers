@@ -13,7 +13,8 @@ namespace s22
 	{
 		Expr expr;
 		Operand opr;
-		Comparison comp;
+		Source_Location loc;
+		Error err;
 	};
 
 	struct Parser
@@ -45,25 +46,25 @@ namespace s22
 		return_value(Source_Location loc, const Parse_Unit &unit);
 
 		Parse_Unit
-		literal(Literal lit, Source_Location loc, Symbol_Type::BASE base);
+		literal(Source_Location loc, Literal lit, Symbol_Type::BASE base);
 
 		Parse_Unit
-		id(const Str &id, Source_Location loc);
+		id(Source_Location loc, const Str &id);
 
 		Parse_Unit
-		array(const Str &id, Source_Location loc, const Parse_Unit &right);
+		array(Source_Location loc, const Str &id, const Parse_Unit &right);
 
 		void
-		assign(const Str &id, Source_Location loc, Op_Assign op, const Parse_Unit &right);
+		assign(Source_Location loc, const Str &id, Op_Assign op, const Parse_Unit &right);
 
 		void
-		array_assign(const Parse_Unit &left, Source_Location loc, Op_Assign op, const Parse_Unit &right);
+		array_assign(Source_Location loc, const Parse_Unit &left, Op_Assign op, const Parse_Unit &right);
 
 		Parse_Unit
-		binary(const Parse_Unit &left, Source_Location loc, Op_Binary op, const Parse_Unit &right);
+		binary(Source_Location loc, const Parse_Unit &left, Op_Binary op, const Parse_Unit &right);
 
 		Parse_Unit
-		unary(Op_Unary op, const Parse_Unit &right, Source_Location loc);
+		unary(Source_Location loc, Op_Unary op, const Parse_Unit &right);
 
 		void
 		pcall_begin();
@@ -72,22 +73,22 @@ namespace s22
 		pcall_add(const Parse_Unit &unit);
 
 		Parse_Unit
-		pcall(const Str &id, Source_Location loc);
+		pcall(Source_Location loc, const Str &id);
 
 		void
-		decl(const Str &id, Source_Location loc, Symbol_Type type);
+		decl(Source_Location loc, const Str &id, Symbol_Type type);
 
 		void
-		decl_expr(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right);
+		decl_expr(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
 		void
-		decl_array(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right);
+		decl_array(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
 		void
-		decl_const(const Str &id, Source_Location loc, Symbol_Type type, const Parse_Unit &right);
+		decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
 		void
-		decl_proc_begin(const Str &id, Source_Location loc);
+		decl_proc_begin(Source_Location loc, const Str &id);
 
 		void
 		decl_proc_end(const Str &id, Symbol_Type return_type);
@@ -96,10 +97,10 @@ namespace s22
 		condition(const Parse_Unit &unit);
 
 		void
-		if_begin(const Parse_Unit &cond, Source_Location loc);
+		if_begin(Source_Location loc, const Parse_Unit &cond);
 
 		void
-		else_if_begin(const Parse_Unit &cond, Source_Location loc);
+		else_if_begin(Source_Location loc, const Parse_Unit &cond);
 
 		void
 		else_begin(Source_Location loc);
@@ -108,7 +109,7 @@ namespace s22
 		if_end(Source_Location loc);
 
 		void
-		switch_begin(const Parse_Unit &unit, Source_Location loc);
+		switch_begin(Source_Location loc, const Parse_Unit &unit);
 
 		void
 		switch_end(Source_Location loc);
@@ -126,7 +127,7 @@ namespace s22
 		switch_default(Source_Location loc);
 
 		void
-		while_begin(const Parse_Unit &cond, Source_Location loc);
+		while_begin(Source_Location loc, const Parse_Unit &cond);
 
 		void
 		while_end(Source_Location loc);
@@ -135,12 +136,12 @@ namespace s22
 		do_while_begin(Source_Location loc);
 
 		void
-		do_while_end(const Parse_Unit &cond, Source_Location loc);
+		do_while_end(Source_Location loc, const Parse_Unit &cond);
 
 		Scope global;
 		Scope *current_scope;
 
-		std::stack<std::vector<Expr>> proc_call_arguments_stack;
+		std::stack<std::vector<Parse_Unit>> proc_call_arguments_stack;
 
 		struct Switch_Case
 		{
@@ -182,10 +183,14 @@ namespace s22
 		INFO,
 		WARNING,
 		ERROR,
+		CRITICAL,
 	};
 
 	void
-	parser_log(const Error &err, Log_Level lvl = Log_Level::ERROR);
+	parser_log(const Error &err, Log_Level lvl = Log_Level::INFO);
+
+	void
+	parser_log(const Error &err, Source_Location loc, Log_Level lvl = Log_Level::INFO);
 }
 
 void

@@ -101,9 +101,9 @@ namespace s22
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol);
 
-	struct Expr;
+	struct Parse_Unit;
 	Result<Symbol *>
-	scope_add_decl(Scope *self, const Symbol &symbol, const Expr &expr);
+	scope_add_decl(Scope *self, const Symbol &symbol, const Parse_Unit &expr);
 
 	Scope *
 	scope_push(Scope *&self);

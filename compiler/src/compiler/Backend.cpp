@@ -1,6 +1,7 @@
 #include "compiler/Backend.h"
 #include "compiler/Symbol.h"
 #include "compiler/Expr.h"
+#include "compiler/Parser.h"
 
 #include <unordered_map>
 #include <fstream>
@@ -9,9 +10,10 @@
 
 namespace s22
 {
-	constexpr static Operand OPR_SP = { .loc = Operand::SP };
-	constexpr static Operand OPR_BP = { .loc = Operand::BP };
+	constexpr static Operand OPR_SP   = { .loc = Operand::SP };
+	constexpr static Operand OPR_BP   = { .loc = Operand::BP };
 	constexpr static Operand OPR_ZERO = { .loc = Operand::IMM, .value = 0 };
+	constexpr static Operand OPR_ONE  = { .loc = Operand::IMM, .value = 1 };
 
 	struct Instruction
 	{
@@ -58,7 +60,7 @@ namespace s22
 
 	template <typename... TArgs>
 	inline static void
-	instruction(Backend self, INSTRUCTION_OP op, TArgs &&...args, Label label)
+	instruction(Backend self, Label label, INSTRUCTION_OP op, TArgs &&...args)
 	{
 		Instruction ins = { op, std::forward<TArgs>(args)... };
 		ins.operand_count = sizeof...(args);
@@ -79,9 +81,35 @@ namespace s22
 		case I_LOG_GT:
 		case I_LOG_GEQ:
 		case I_LOG_NOT:
+		case I_LOG_AND:
+		case I_LOG_OR:
 			return true;
 		default:
 			return false;
+		}
+	}
+
+	inline static INSTRUCTION_OP
+	invert_condition(INSTRUCTION_OP op)
+	{
+		if (instruction_is_comparison(op) == false)
+			return op;
+
+		switch (op)
+		{
+		case I_LOG_LT: 	return I_LOG_GEQ;
+		case I_LOG_LEQ:	return I_LOG_GT;
+		case I_LOG_EQ:	return I_LOG_NEQ;
+		case I_LOG_NEQ:	return I_LOG_EQ;
+		case I_LOG_GT:	return I_LOG_LEQ;
+		case I_LOG_GEQ:	return I_LOG_LT;
+
+		// TODO(abdelrahman.farid) verify this
+		case I_LOG_NOT:	return I_BZ;
+		case I_TEST:	return I_BNZ;
+
+		default: // unreachable
+			return I_BR;
 		}
 	}
 
@@ -120,6 +148,36 @@ namespace s22
 	{
 		for (auto &reg: self->reg)
 			reg.is_used = false;
+	}
+
+	inline static void
+	compare(Backend self, Instruction ins, Source_Location loc)
+	{
+		Operand br = { .loc = Operand::LBL };
+
+		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
+		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+
+		// b_inv $end_if, op1, op2
+		br.label = end_if;
+		auto op_inv = invert_condition(ins.op);
+		if (op_inv == I_BZ || op_inv == I_BNZ)
+			instruction(self, op_inv, br, ins.src1);
+		else
+			instruction(self, op_inv, br, ins.src1, ins.src2);
+
+		// mov dst, 1
+		instruction(self, I_MOV, ins.dst, OPR_ONE);
+
+		// br $end
+		br.label = end_all;
+		instruction(self, I_BR, br);
+
+		// $end_if: mov dst, 0
+		instruction(self, end_if, I_MOV, ins.dst, OPR_ZERO);
+
+		// $end_all
+		instruction(self, end_all, I_NOP);
 	}
 
 	inline static void
@@ -191,7 +249,7 @@ namespace s22
 	}
 
 	void
-	backend_decl_expr(Backend self, const Symbol *sym, Operand right)
+	backend_decl_expr(Backend self, const Symbol *sym, const Parse_Unit &right)
 	{
 		backend_decl(self, sym);
 		backend_assign(self, I_MOV, sym, right);
@@ -204,63 +262,74 @@ namespace s22
 	}
 
 	Operand
-	backend_array_access(Backend self, const Symbol *sym, Operand right)
+	backend_array_access(Backend self, const Symbol *sym, const Parse_Unit &right)
 	{
 		auto opr = self->variables[sym];
-		opr.offset -= right.value;
+		opr.offset -= right.opr.value;
 		return opr;
 	}
 
 	void
-	backend_assign(Backend self, INSTRUCTION_OP op, const Symbol *sym, Operand right)
+	backend_assign(Backend self, INSTRUCTION_OP op, const Symbol *sym, const Parse_Unit &right)
 	{
-		assign(self, op, self->variables[sym], right);
+		assign(self, op, self->variables[sym], right.opr);
 	}
 
 	void
-	backend_array_assign(Backend self, INSTRUCTION_OP op, Operand left, Operand right)
+	backend_array_assign(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right)
 	{
-		assign(self, op, left, right);
+		assign(self, op, left.opr, right.opr);
 	}
 
 	Operand
-	backend_binary(Backend self, INSTRUCTION_OP op, Operand left, Operand right)
+	backend_binary(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right)
 	{
 		// Collect operands
-		auto opr1 = left;
+		auto opr1 = left.opr;
 		if (opr1.loc == Operand::MEM)
 		{
 			auto reg = first_available_register(self);
-			instruction(self, I_LD, reg, left);
+			instruction(self, I_LD, reg, left.opr);
 			opr1 = reg;
+
+			// Don't use for other op
+			self->reg[opr1.loc].is_used = true;
 		}
 
-		auto opr2 = right;
+		auto opr2 = right.opr;
 		if (opr2.loc == Operand::MEM)
 		{
 			auto reg = first_available_register(self);
-			instruction(self, I_LD, reg, right);
+			instruction(self, I_LD, reg, right.opr);
 			opr2 = reg;
 		}
 
 		auto dst = first_available_register(self);
 		self->reg[dst.loc].is_used = true;
 
-		instruction(self, op, dst, opr1, opr2);
+		// TODO: Add locations for operands
+		if (instruction_is_comparison(op) == false)
+			instruction(self, op, dst, opr1, opr2);
+		else
+		{
+			Instruction ins = { .op = op, .dst = dst, .src1 = opr1, .src2 = opr2 };
+			compare(self, ins, left.loc);
+		}
 
-		// TODO: I_LOG_AND
+		if (operand_is_register(opr1))
+			self->reg[opr1.loc].is_used = false;
 
 		return dst;
 	}
 
 	Operand
-	backend_unary(Backend self, INSTRUCTION_OP op, Operand right)
+	backend_unary(Backend self, INSTRUCTION_OP op, const Parse_Unit &right)
 	{
-		auto opr = right;
+		auto opr = right.opr;
 		if (opr.loc == Operand::MEM)
 		{
 			auto reg = first_available_register(self);
-			instruction(self, I_LD, reg, right);
+			instruction(self, I_LD, reg, right.opr);
 			opr = reg;
 		}
 
@@ -270,27 +339,6 @@ namespace s22
 		instruction(self, op, dst, opr);
 
 		return dst;
-	}
-
-	Comparison
-	backend_condition(Backend self)
-	{
-		auto ins = self->program.back();
-
-		// If the instruction is logical, replace with condition
-		if (instruction_is_comparison(ins.op))
-		{
-			self->program.pop_back();
-
-			if (ins.op == I_LOG_NOT)
-				return Comparison{ I_LOG_EQ, ins.src1, OPR_ZERO };
-
-			// Binary
-			return Comparison{ ins.op, ins.src1, ins.src2 };
-		}
-
-		// If the instruction is arithmetic/singular
-		return Comparison{ I_LOG_NEQ, ins.dst, OPR_ZERO };
 	}
 }
 
@@ -337,8 +385,8 @@ struct std::formatter<s22::Label> : std::formatter<std::string>
 		case Label::LABEL: 		lbl = "LABEL"; 		break;
 
 		case Label::END_IF: 	lbl = "END_IF";		break;
-		case Label::END_ELSE: 	lbl = "END_ELSE";	break;
 		case Label::END_ELSEIF: lbl = "END_ELSEIF";	break;
+		case Label::END_ALL: 	lbl = "END_ALL";	break;
 		case Label::END_CASE: 	lbl = "END_CASE";	break;
 		case Label::END_SWITCH: lbl = "END_SWITCH";	break;
 
@@ -361,9 +409,14 @@ struct std::formatter<s22::Instruction> : std::formatter<std::string>
 	auto
 	format(s22::Instruction ins, format_context &ctx)
 	{
+		if (ins.label.type != s22::Label::NONE)
+			format_to(ctx.out(), "{}: ", ins.label);
+
 		using namespace s22;
 		switch (ins.op)
 		{
+		case I_NOP: 	return ctx.out();
+
 		case I_LD: 		format_to(ctx.out(), "LD"); 	break;
 		case I_ST: 		format_to(ctx.out(), "ST"); 	break;
 		case I_MOV:		format_to(ctx.out(), "MOV"); 	break;
@@ -383,8 +436,13 @@ struct std::formatter<s22::Instruction> : std::formatter<std::string>
 		case I_INV:		format_to(ctx.out(), "INV");	break;
 
 		// Logical
-		case I_LOG_OR:	format_to(ctx.out(), "OR");		break;
+		case I_LOG_LT:	format_to(ctx.out(), "BLT");	break;
+		case I_LOG_LEQ:	format_to(ctx.out(), "BLE");	break;
+		case I_LOG_EQ:	format_to(ctx.out(), "BEQ");	break;
+		case I_LOG_NEQ:	format_to(ctx.out(), "BNE");	break;
 
+		// Branch
+		case I_BR:		format_to(ctx.out(), "BR"); 	break;
 		default: 		return ctx.out();
 		}
 

@@ -24,9 +24,6 @@ namespace s22
 
 		// Optional literal value
 		Literal lit;
-
-		Source_Location loc;
-		Error err;
 	};
 
 	enum class Op_Assign
@@ -82,32 +79,34 @@ namespace s22
 		INV = I_INV, // ~A
 
 		// Logical
-		NOT = I_INV+1, // !A
+		NOT = I_LOG_NOT, // !A
 	};
 
-	Expr
-	expr_literal(Scope *scope, Literal lit, Source_Location loc, Symbol_Type::BASE base);
+	struct Parse_Unit;
 
-	Expr
-	expr_identifier(Scope *scope, const char *id, Source_Location loc);
+	Result<Expr>
+	expr_literal(Scope *scope, Literal lit, Symbol_Type::BASE base);
 
-	Expr
-	expr_assign(Scope *scope, const char *id, Source_Location loc, const Expr &right, Op_Assign op);
+	Result<Expr>
+	expr_identifier(Scope *scope, const char *id);
 
-	Expr
-	expr_array_assign(Scope *scope, const Expr &left, Source_Location loc, const Expr &right, Op_Assign op);
+	Result<Expr>
+	expr_assign(Scope *scope, const char *id, const Parse_Unit &right, Op_Assign op);
 
-	Expr
-	expr_binary(Scope *scope, const Expr &left, Source_Location loc, const Expr &right, Op_Binary op);
+	Result<Expr>
+	expr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Assign op);
 
-	Expr
-	expr_unary(Scope *scope, const Expr &right, Source_Location loc, Op_Unary op);
+	Result<Expr>
+	expr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Binary op);
 
-	Expr
-	expr_array_access(Scope *scope, const char *id, Source_Location loc, const Expr &expr);
+	Result<Expr>
+	expr_unary(Scope *scope, const Parse_Unit &right, Op_Unary op);
 
-	Expr
-	expr_proc_call(Scope *scope, const char *id, Source_Location loc, Buf<Expr> params);
+	Result<Expr>
+	expr_array_access(Scope *scope, const char *id, const Parse_Unit &expr);
+
+	Result<Expr>
+	expr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params);
 }
 
 template <>

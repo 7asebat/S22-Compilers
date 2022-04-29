@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="s22::AST">
+    <DisplayString>{{ kind={kind} }}</DisplayString>
+
+    <Expand>
+      <ExpandedItem Condition="kind == s22::AST::LITERAL">as_lit</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::SYMBOL">as_sym</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::PROC_CALL">as_pcall</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::ARRAY_ACCESS">as_arr_access</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::BINARY">as_binary</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::UNARY">as_unary</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::ASSIGN">as_assign</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::DECL">as_decl</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::DECL_PROC">as_decl_proc</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::IF_COND">as_if</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::SWITCH">as_switch</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::SWITCH_CASE">as_case</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::WHILE">as_while</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::FOR">as_for</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::BLOCK">as_block</ExpandedItem>
+    </Expand>
+  </Type>
+
+  <Type Name="s22::Str">
+    <DisplayString Condition="count == 0">empty</DisplayString>
+    <DisplayString Condition="count != 0" Encoding="Utf8">{data,[count]s8}</DisplayString>
+  </Type>
+
+  <Type Name="s22::Buf&lt;*&gt;">
+    <DisplayString Condition="count == 0">empty</DisplayString>
+    <DisplayString Condition="count != 0">{{ count={count} }}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>count</Size>
+        <ValuePointer>data</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+</AutoVisualizer>

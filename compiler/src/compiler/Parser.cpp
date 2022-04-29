@@ -11,25 +11,50 @@ namespace s22
 
 		this->backend = backend_instance();
 		backend_init(this->backend);
+
+		// Start a new list of statements
+		this->block_stmts_stack.emplace();
 	}
 
 	void
-	Parser::push()
+	Parser::block_begin()
 	{
 		scope_push(this->current_scope);
+		this->block_stmts_stack.emplace();
 	}
 
 	void
-	Parser::pop()
+	Parser::block_add(const Parse_Unit &unit)
 	{
+		auto &l = this->block_stmts_stack.top();
+		l.push_back(unit.ast);
+	}
+
+	Parse_Unit
+	Parser::block_end()
+	{
+		Parse_Unit self = {};
+
+		// Stop current list of statements
+		{
+			auto l = std::move(this->block_stmts_stack.top());
+			this->block_stmts_stack.pop();
+
+			auto stmts = Buf<AST>::clone(l);
+			self.ast = ast_block(stmts);
+		}
+
 		// TODO: Assert returns
 		scope_pop(this->current_scope);
 
 		if (this->current_scope == nullptr)
 		{
 			parser_log(Error{ "Complete!" }, Log_Level::INFO);
-			backend_generate(this->backend);
+			backend_generate(this->backend, self.ast);
+			backend_write(this->backend);
 		}
+
+		return self;
 	}
 
 	void
@@ -100,14 +125,9 @@ namespace s22
 	{
 		Parse_Unit self = { .loc = loc };
 
-		auto [expr, _] = expr_literal(nullptr, lit, base);
+		auto [expr, _] = semexpr_literal(nullptr, lit, base);
 		self.expr = expr;
-
-		self.opr = {
-			.loc = Operand::IMM,
-			.size = 1,
-			.value = lit.value
-		};
+		self.ast = ast_literal(lit);
 
 		return self;
 	}
@@ -118,7 +138,7 @@ namespace s22
 		Parse_Unit self = { .loc = loc };
 		self.loc = loc;
 
-		if (auto [expr, err] = expr_identifier(this->current_scope, id.data); err)
+		if (auto [expr, err] = semexpr_id(this->current_scope, id.data); err)
 		{
 			self.err = Error{loc, err};
 
@@ -130,7 +150,9 @@ namespace s22
 		}
 
 		if (auto sym = scope_get_id(this->current_scope, id.data))
-			self.opr = backend_id(this->backend, sym);
+		{
+			self.ast = ast_symbol(sym);
+		}
 
 		return self;
 	}
@@ -139,7 +161,7 @@ namespace s22
 	Parser::array(Source_Location loc, const Str &id, const Parse_Unit &right)
 	{
 		Parse_Unit self = { .loc = loc };
-		if (auto [expr, err] = expr_array_access(this->current_scope, id.data, right); err)
+		if (auto [expr, err] = semexpr_array_access(this->current_scope, id.data, right); err)
 		{
 			self.err = Error{loc, err};
 
@@ -152,43 +174,54 @@ namespace s22
 		}
 
 		if (auto sym = scope_get_id(this->current_scope, id.data))
-			self.opr = backend_array_access(this->backend, sym, right);
+		{
+			self.ast = ast_array_access(sym, right.ast);
+		}
 
 		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::assign(Source_Location loc, const Str &id, Op_Assign op, const Parse_Unit &right)
 	{
-		if (auto [expr, err] = expr_assign(this->current_scope, id.data, right, op); err)
+		Parse_Unit self = {};
+		if (auto [expr, err] = semexpr_assign(this->current_scope, id.data, right, op); err)
 		{
 			if (right.err == false)
 				parser_log(err, loc);
 		}
 
 		if (auto sym = scope_get_id(this->current_scope, id.data))
-			backend_assign(this->backend, (INSTRUCTION_OP)op, sym, right);
+		{
+			self.ast = ast_assign((Assignment::KIND)op, ast_symbol(sym), right.ast);
+		}
+
+		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::array_assign(Source_Location loc, const Parse_Unit &left, Op_Assign op, const Parse_Unit &right)
 	{
-		if (auto [expr, err] = expr_array_assign(this->current_scope, left, right, op); err)
+		Parse_Unit self = {};
+		if (auto [expr, err] = semexpr_array_assign(this->current_scope, left, right, op); err)
 		{
 			if (right.err == false)
 				parser_log(err, loc);
 		}
+
 		else
 		{
-			backend_array_assign(this->backend, (INSTRUCTION_OP)op, left, right);
+			self.ast = ast_assign((Assignment::KIND)op, left.ast, right.ast);
 		}
+
+		return self;
 	}
 
 	Parse_Unit
-	Parser::binary(Source_Location loc, const Parse_Unit &left, Op_Binary op, const Parse_Unit &right)
+	Parser::binary(Source_Location loc, const Parse_Unit &left, Bin op, const Parse_Unit &right)
 	{
 		Parse_Unit self = { .loc = loc };
-		if (auto [expr, err] = expr_binary(this->current_scope, left, right, op); err)
+		if (auto [expr, err] = semexpr_binary(this->current_scope, left, right, op); err)
 		{
 			self.err = Error{loc, err};
 
@@ -198,17 +231,17 @@ namespace s22
 		else
 		{
 			self.expr = expr;
-			self.opr = backend_binary(this->backend, (INSTRUCTION_OP)op, left, right);
+			self.ast = ast_binary((Binary_Op::KIND)op, left.ast, right.ast);
 		}
 
 		return self;
 	}
 
 	Parse_Unit
-	Parser::unary(Source_Location loc, Op_Unary op, const Parse_Unit &right)
+	Parser::unary(Source_Location loc, Uny op, const Parse_Unit &right)
 	{
 		Parse_Unit self = { .loc = loc };
-		if (auto [expr, err] = expr_unary(this->current_scope, right, op); err)
+		if (auto [expr, err] = semexpr_unary(this->current_scope, right, op); err)
 		{
 			self.err = Error{loc, err};
 
@@ -218,7 +251,7 @@ namespace s22
 		else
 		{
 			self.expr = expr;
-			self.opr = backend_unary(this->backend, (INSTRUCTION_OP)op, right);
+			self.ast = ast_unary((Unary_Op::KIND)op, right.ast);
 		}
 
 		return self;
@@ -244,7 +277,7 @@ namespace s22
 		Buf<Parse_Unit> params = { .data = list.data(), .count = list.size() };
 
 		Parse_Unit self = { .loc = loc };
-		if (auto [expr, err] = expr_proc_call(this->current_scope, id.data, params); err)
+		if (auto [expr, err] = semexpr_proc_call(this->current_scope, id.data, params); err)
 		{
 			self.err = Error{loc, err};
 
@@ -261,9 +294,16 @@ namespace s22
 			if (unique_error)
 				parser_log(err, loc);
 		}
-		else
+		else if (auto sym = scope_get_id(this->current_scope, id.data))
 		{
 			self.expr = expr;
+
+			// Build ast arguments
+			auto ast_args = Buf<AST>::make(params.count);
+			for (size_t i = 0; i < params.count; i++)
+				ast_args[i] = params[i].ast;
+
+			self.ast = ast_pcall(sym, ast_args);
 		}
 
 		this->proc_call_arguments_stack.pop();
@@ -271,9 +311,10 @@ namespace s22
 		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::decl(Source_Location loc, const Str &id, Symbol_Type type)
 	{
+		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
 		auto [sym, err] = scope_add_decl(this->current_scope, symbol);
@@ -283,12 +324,16 @@ namespace s22
 		}
 
 		if (err == false)
-			backend_decl(this->backend, sym);
+		{
+			self.ast = ast_decl(sym, AST{});
+		}
+		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::decl_expr(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
+		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
 		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right);
@@ -298,12 +343,17 @@ namespace s22
 		}
 
 		if (err == false)
-			backend_decl_expr(this->backend, sym, right);
+		{
+			self.ast = ast_decl(sym, right.ast);
+		}
+
+		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::decl_array(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
+		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 		symbol.type.array = right.expr.lit.value;
 
@@ -314,12 +364,16 @@ namespace s22
 		}
 
 		if (err == false)
-			backend_decl(this->backend, sym);
+		{
+			self.ast = ast_decl(sym, AST{});
+		}
+		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
+		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
 
 		auto [sym, err] = scope_add_decl(this->current_scope, symbol, right);
@@ -329,7 +383,11 @@ namespace s22
 		}
 
 		if (err == false)
-			backend_decl_expr(this->backend, sym, right);
+		{
+			self.ast = ast_decl(sym, right.ast);
+		}
+
+		return self;
 	}
 
 	void
@@ -395,7 +453,7 @@ namespace s22
 		auto &expr = unit.expr;
 		auto &opr = unit.opr;
 
-		if (expr.kind != Expr::LITERAL || symtype_is_integral(expr.type) == false)
+		if (expr.kind != Semantic_Expr::LITERAL || symtype_is_integral(expr.type) == false)
 		{
 			if (unit.err == false)
 				parser_log(Error{ unit.loc, "invalid case" });

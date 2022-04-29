@@ -35,7 +35,13 @@ namespace s22
 
 		auto ptr = calloc(count, sizeof(T));
 		log << ptr;
-		return (T *)ptr;
+
+		if (count == 1)
+		{
+			*(T*)ptr = T{};
+		}
+
+		return (T*)ptr;
 	}
 
 	template <typename T>
@@ -91,7 +97,7 @@ namespace s22
 		T *data;
 		size_t count;
 
-		static Buf<T>
+		inline static Buf<T>
 		make(size_t count = 0)
 		{
 			Buf<T> self = {};
@@ -104,10 +110,22 @@ namespace s22
 			return self;
 		}
 
-		T &
+		inline static Buf<T>
+		clone(const std::vector<T> &vec)
+		{
+			auto self = make(vec.size());
+
+			if (self.count > 0)
+			{
+				::memcpy(self.data, vec.data(), self.count * sizeof(T));
+			}
+			return self;
+		}
+
+		inline T &
 		operator[](size_t i) { return data[i]; }
 
-		const T &
+		inline const T &
 		operator[](size_t i) const { return data[i]; }
 
 		inline T*

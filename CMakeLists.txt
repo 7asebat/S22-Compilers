@@ -25,18 +25,20 @@ add_custom_command(
 )
 
 set(COMPILER_SOURCE_FILES
+	compiler/src/compiler/AST.cpp
 	compiler/src/compiler/Backend.cpp
 	compiler/src/compiler/Symbol.cpp
-	compiler/src/compiler/Expr.cpp
+	compiler/src/compiler/Semantic_Expr.cpp
 	compiler/src/compiler/Parser.cpp
 	compiler/src/compiler/main.cpp
 )
 
 set(COMPILER_HEADER_FILES
 	compiler/include/compiler/Util.h
+	compiler/include/compiler/AST.h
 	compiler/include/compiler/Backend.h
 	compiler/include/compiler/Symbol.h
-	compiler/include/compiler/Expr.h
+	compiler/include/compiler/Semantic_Expr.h
 	compiler/include/compiler/Parser.h
 )
 

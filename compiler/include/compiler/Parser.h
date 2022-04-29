@@ -1,8 +1,9 @@
 #pragma once
 
 #include "compiler/Symbol.h"
-#include "compiler/Expr.h"
+#include "compiler/Semantic_Expr.h"
 #include "compiler/Backend.h"
+#include "compiler/AST.h"
 
 #include <stack>
 #include <unordered_set>
@@ -11,8 +12,9 @@ namespace s22
 {
 	struct Parse_Unit
 	{
-		Expr expr;
+		Semantic_Expr expr;
 		Operand opr;
+		AST ast;
 		Source_Location loc;
 		Error err;
 	};
@@ -31,10 +33,13 @@ namespace s22
 		init();
 
 		void
-		push();
+		block_begin();
 
 		void
-		pop();
+		block_add(const Parse_Unit &unit);
+
+		Parse_Unit
+		block_end();
 
 		void
 		new_stmt();
@@ -54,17 +59,17 @@ namespace s22
 		Parse_Unit
 		array(Source_Location loc, const Str &id, const Parse_Unit &right);
 
-		void
+		Parse_Unit
 		assign(Source_Location loc, const Str &id, Op_Assign op, const Parse_Unit &right);
 
-		void
+		Parse_Unit
 		array_assign(Source_Location loc, const Parse_Unit &left, Op_Assign op, const Parse_Unit &right);
 
 		Parse_Unit
-		binary(Source_Location loc, const Parse_Unit &left, Op_Binary op, const Parse_Unit &right);
+		binary(Source_Location loc, const Parse_Unit &left, Bin op, const Parse_Unit &right);
 
 		Parse_Unit
-		unary(Source_Location loc, Op_Unary op, const Parse_Unit &right);
+		unary(Source_Location loc, Uny op, const Parse_Unit &right);
 
 		void
 		pcall_begin();
@@ -75,16 +80,16 @@ namespace s22
 		Parse_Unit
 		pcall(Source_Location loc, const Str &id);
 
-		void
+		Parse_Unit
 		decl(Source_Location loc, const Str &id, Symbol_Type type);
 
-		void
+		Parse_Unit
 		decl_expr(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
-		void
+		Parse_Unit
 		decl_array(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
-		void
+		Parse_Unit
 		decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
 		void
@@ -142,6 +147,7 @@ namespace s22
 		Scope *current_scope;
 
 		std::stack<std::vector<Parse_Unit>> proc_call_arguments_stack;
+		std::stack<std::vector<AST>> block_stmts_stack;
 
 		struct Switch_Case
 		{

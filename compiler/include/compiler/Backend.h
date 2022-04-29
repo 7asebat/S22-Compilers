@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "compiler/AST.h"
 
 namespace s22
 {
@@ -47,7 +48,7 @@ namespace s22
 			PROC,
 		};
 		TYPE type;
-		int line, col;
+		uint64_t id;
 	};
 
 	// Temporary register
@@ -94,7 +95,10 @@ namespace s22
 	backend_init(Backend self);
 
 	void
-	backend_generate(Backend self);
+	backend_write(Backend self);
+
+	Operand
+	backend_generate(Backend self, AST ast);
 
 	void
 	backend_decl(Backend self, const Symbol *sym);
@@ -103,7 +107,10 @@ namespace s22
 	backend_decl_expr(Backend self, const Symbol *sym, const Parse_Unit &right);
 
 	Operand
-	backend_id(Backend self, const Symbol *sym);
+	backend_lit(Backend self, Literal lit);
+
+	Operand
+	backend_sym(Backend self, const Symbol *sym);
 
 	Operand
 	backend_array_access(Backend self, const Symbol *sym, const Parse_Unit &right);

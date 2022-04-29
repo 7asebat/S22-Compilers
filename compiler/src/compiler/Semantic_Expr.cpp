@@ -1,35 +1,35 @@
-#include "compiler/Expr.h"
+#include "compiler/Semantic_Expr.h"
 #include "compiler/Parser.h"
 
 namespace s22
 {
-	Result<Expr>
-	expr_literal(Scope *scope, Literal lit, Symbol_Type::BASE base)
+	Result<Semantic_Expr>
+	semexpr_literal(Scope *scope, Literal lit, Symbol_Type::BASE base)
 	{
-		Expr self = {};
+		Semantic_Expr self = {};
 		self.type = { .base = base };
 
-		self.kind = Expr::LITERAL;
+		self.kind = Semantic_Expr::LITERAL;
 		self.lit = lit;
 
 		return self;
 	}
 
-	Result<Expr>
-	expr_identifier(Scope *scope, const char *id)
+	Result<Semantic_Expr>
+	semexpr_id(Scope *scope, const char *id)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
-		Expr self = {};
+		Semantic_Expr self = {};
 		self.type = sym->type;
 		return self;
 	}
 
-	Result<Expr>
-	expr_assign(Scope *scope, const char *id, const Parse_Unit &right, Op_Assign op)
+	Result<Semantic_Expr>
+	semexpr_assign(Scope *scope, const char *id, const Parse_Unit &right, Op_Assign op)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
@@ -44,56 +44,56 @@ namespace s22
 
 		sym->is_set = true;
 
-		Expr self = {};
+		Semantic_Expr self = {};
 		self.type = sym->type;
 		return self;
 	}
 
-	Result<Expr>
-	expr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Assign op)
+	Result<Semantic_Expr>
+	semexpr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Assign op)
 	{
 		if (left.expr.type != right.expr.type)
 			return Error{ "type mismatch" };
 
-		Expr self = {};
+		Semantic_Expr self = {};
 		self.type = left.expr.type;
 		return self;
 	}
 
-	Result<Expr>
-	expr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Binary op)
+	Result<Semantic_Expr>
+	semexpr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Bin op)
 	{
+		// TODO: Cast to boolean
 		if (left.expr.type != right.expr.type)
 			return Error{ "type mismatch" };
 
 		if (symtype_allows_arithmetic(left.expr.type) == false)
 			return Error{ left.loc, "invalid operand" };
 
-		Expr self = {};
-
+		Semantic_Expr self = {};
 		switch (op)
 		{
-		case Op_Binary::ADD:
-		case Op_Binary::SUB:
-		case Op_Binary::MUL:
-		case Op_Binary::DIV:
-		case Op_Binary::MOD:
-		case Op_Binary::AND:
-		case Op_Binary::OR:
-		case Op_Binary::XOR:
-		case Op_Binary::SHL:
-		case Op_Binary::SHR:
+		case Bin::ADD:
+		case Bin::SUB:
+		case Bin::MUL:
+		case Bin::DIV:
+		case Bin::MOD:
+		case Bin::AND:
+		case Bin::OR:
+		case Bin::XOR:
+		case Bin::SHL:
+		case Bin::SHR:
 			self.type = left.expr.type;
 			break;
 
-		case Op_Binary::LT:
-		case Op_Binary::LEQ:
-		case Op_Binary::EQ:
-		case Op_Binary::NEQ:
-		case Op_Binary::GT:
-		case Op_Binary::GEQ:
-		case Op_Binary::L_AND:
-		case Op_Binary::L_OR:
+		case Bin::LT:
+		case Bin::LEQ:
+		case Bin::EQ:
+		case Bin::NEQ:
+		case Bin::GT:
+		case Bin::GEQ:
+		case Bin::L_AND:
+		case Bin::L_OR:
 			self.type = SYMTYPE_BOOL;
 			break;
 		}
@@ -101,15 +101,15 @@ namespace s22
 		return self;
 	}
 
-	Result<Expr>
-	expr_unary(Scope *scope, const Parse_Unit &right, Op_Unary op)
+	Result<Semantic_Expr>
+	semexpr_unary(Scope *scope, const Parse_Unit &right, Uny op)
 	{
 		if (symtype_allows_arithmetic(right.expr.type) == false)
 			return Error{ right.loc, "invalid operand" };
 
-		Expr self = {};
+		Semantic_Expr self = {};
 
-		if (op != Op_Unary::NOT)
+		if (op != Uny::NOT)
 			self.type = right.expr.type;
 		else
 			self.type = SYMTYPE_BOOL;
@@ -117,8 +117,8 @@ namespace s22
 		return self;
 	}
 
-	Result<Expr>
-	expr_array_access(Scope *scope, const char *id, const Parse_Unit &expr)
+	Result<Semantic_Expr>
+	semexpr_array_access(Scope *scope, const char *id, const Parse_Unit &expr)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
@@ -131,15 +131,15 @@ namespace s22
 		if (symtype_is_integral(expr.expr.type) == false)
 			return Error{ expr.loc, "invalid index" };
 
-		Expr self = {};
+		Semantic_Expr self = {};
 		self.type = sym->type;
 		self.type.array = 0;
 
 		return self;
 	}
 
-	Result<Expr>
-	expr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params)
+	Result<Semantic_Expr>
+	semexpr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
@@ -158,7 +158,7 @@ namespace s22
 				return Error{ params[i].loc, "invalid argument" };
 		}
 
-		Expr self {};
+		Semantic_Expr self {};
 		self.type = sym->type.procedure->return_type | SYMTYPE_VOID;
 
 		return self;

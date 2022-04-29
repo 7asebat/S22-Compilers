@@ -1,6 +1,6 @@
 #include "compiler/Backend.h"
 #include "compiler/Symbol.h"
-#include "compiler/Expr.h"
+#include "compiler/Semantic_Expr.h"
 #include "compiler/Parser.h"
 
 #include <unordered_map>
@@ -145,13 +145,21 @@ namespace s22
 			reg.is_used = false;
 	}
 
+	inline static size_t
+	make_label_id()
+	{
+		static size_t label_id = 0;
+		return label_id++;
+	}
+
 	inline static void
-	logical_and(Backend self, Instruction ins, Source_Location loc)
+	logical_and(Backend self, Instruction ins)
 	{
 		Operand br = { .loc = Operand::LBL };
 
-		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
-		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+		auto label_id = make_label_id();
+		Label end_if  = { .type = Label::END_IF,  .id = label_id };
+		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// bz $end_if, op1
 		// bz $end_if, op2
@@ -174,14 +182,15 @@ namespace s22
 	}
 
 	inline static void
-	logical_or(Backend self, Instruction ins, Source_Location loc)
+	logical_or(Backend self, Instruction ins)
 	{
 		// a = b || c
 		// a = !(!b && !c)
 		Operand br = { .loc = Operand::LBL };
 
-		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
-		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+		auto label_id = make_label_id();
+		Label end_if  = { .type = Label::END_IF,  .id = label_id };
+		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// bnz $end_if, op1
 		// bnz $end_if, op2
@@ -204,12 +213,13 @@ namespace s22
 	}
 
 	inline static void
-	logical_not(Backend self, Instruction ins, Source_Location loc)
+	logical_not(Backend self, Instruction ins)
 	{
 		Operand br = { .loc = Operand::LBL };
 
-		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
-		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+		auto label_id = make_label_id();
+		Label end_if  = { .type = Label::END_IF,  .id = label_id };
+		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// bz $end_if, op
 		br.label = end_if;
@@ -230,12 +240,13 @@ namespace s22
 	}
 
 	inline static void
-	compare(Backend self, Instruction ins, Source_Location loc)
+	compare(Backend self, Instruction ins)
 	{
 		Operand br = { .loc = Operand::LBL };
 
-		Label end_if  = { .type = Label::END_IF , .line = loc.first_line, .col = loc.last_column };
-		Label end_all = { .type = Label::END_ALL, .line = loc.first_line, .col = loc.last_column };
+		auto label_id = make_label_id();
+		Label end_if  = { .type = Label::END_IF,  .id = label_id };
+		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// b_inv $end_if, op1, op2
 		br.label = end_if;
@@ -308,7 +319,7 @@ namespace s22
 
 
 	void
-	backend_generate(Backend self)
+	backend_write(Backend self)
 	{
 		for (const auto &ins : self->program)
 			std::cout << std::format("{}\n", ins);
@@ -335,7 +346,13 @@ namespace s22
 	}
 
 	Operand
-	backend_id(Backend self, const Symbol *sym)
+	backend_lit(Backend self, Literal lit)
+	{
+		return { .loc = Operand::IMM, .size = 1, .value = lit.value };
+	}
+
+	Operand
+	backend_sym(Backend self, const Symbol *sym)
 	{
 		return self->variables[sym];
 	}
@@ -396,15 +413,15 @@ namespace s22
 			Instruction ins = { .op = op, .dst = dst, .src1 = opr1, .src2 = opr2 };
 			if (op == I_LOG_AND)
 			{
-				logical_and(self, ins, left.loc);
+				logical_and(self, ins);
 			}
 			else if (op == I_LOG_OR)
 			{
-				logical_or(self, ins, left.loc);
+				logical_or(self, ins);
 			}
 			else
 			{
-				compare(self, ins, left.loc);
+				compare(self, ins);
 			}
 		}
 
@@ -435,7 +452,7 @@ namespace s22
 		else
 		{
 			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = opr };
-			logical_not(self, ins, right.loc);
+			logical_not(self, ins);
 		}
 
 		return dst;
@@ -446,6 +463,82 @@ namespace s22
 	{
 		// Generate condition
 	}
+
+	Operand
+	backend_generate(Backend self, AST ast)
+	{
+		// Post-order traverse the tree
+		switch (ast.kind)
+		{
+		case AST::LITERAL:	return backend_lit(self, *ast.as_lit);
+		case AST::SYMBOL:	return backend_sym(self, ast.as_sym);
+
+		case AST::PROC_CALL: return {}; // TODO: IMPLEMENT
+
+		case AST::ARRAY_ACCESS: {
+			auto arr = ast.as_arr_access;
+			auto opr = backend_sym(self, arr->sym);
+			auto offset = backend_generate(self, arr->index);
+			opr.offset -= offset.value;
+			return opr;
+		}
+
+		case AST::BINARY: {
+			auto bin = ast.as_binary;
+			auto left = backend_generate(self, bin->left);
+			auto right = backend_generate(self, bin->right);
+			return backend_binary(self, (INSTRUCTION_OP)bin->kind, Parse_Unit{.opr = left}, Parse_Unit{.opr = right});
+		}
+
+		case AST::UNARY: {
+			auto uny = ast.as_unary;
+			auto right = backend_generate(self, uny->right);
+			return backend_unary(self, (INSTRUCTION_OP)uny->kind, Parse_Unit{.opr = right});
+		}
+
+		case AST::ASSIGN: {
+			auto as = ast.as_assign;
+			auto dst = backend_generate(self, as->dst);
+			auto expr = backend_generate(self, as->expr);
+			assign(self, (INSTRUCTION_OP)as->kind, dst, expr);
+			return {};
+		}
+
+		case AST::DECL: {
+			auto decl = ast.as_decl;
+
+			if (decl->expr.kind == AST::NIL)
+			{
+				backend_decl(self, decl->sym);
+			}
+			else
+			{
+				auto expr = backend_generate(self, decl->expr);
+				backend_decl_expr(self, decl->sym, Parse_Unit{.opr = expr});
+			}
+
+			return {};
+		}
+
+		case AST::DECL_PROC: 	return {}; // TODO: Implement
+
+		case AST::IF_COND:  	return {}; // TODO: Implement
+		case AST::SWITCH:  		return {}; // TODO: Implement
+		case AST::SWITCH_CASE:  return {}; // TODO: Implement
+
+		case AST::WHILE:  		return {}; // TODO: Implement
+		case AST::FOR:  		return {}; // TODO: Implement
+
+		case AST::BLOCK: {
+			for (auto stmt: ast.as_block->stmts)
+				backend_generate(self, stmt);
+		}
+
+		default:
+			return {};
+		}
+	}
+
 }
 
 template <>
@@ -505,7 +598,7 @@ struct std::formatter<s22::Label> : std::formatter<std::string>
 		case Label::PROC: 		lbl = "PROC";		break;
 		}
 
-		return format_to(ctx.out(), "{}#{}_{}", lbl, label.line, label.col);
+		return format_to(ctx.out(), "{}#{}", lbl, label.id);
 	}
 };
 

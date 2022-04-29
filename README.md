@@ -17,8 +17,8 @@ $ make run
 - [x] Simple syntax error handler
 
 ### Phase 2
-- [ ] Design a suitable and extensible format for the symbol table
+- [ ] Design a suitable and extensible format for the ast_symbol table
 - [ ] Design suitable action rules to produce the output quadruples
 - [ ] Implement a proper syntax error handler
 - [ ] Build a simple semantic analyzer
-- [ ] Implement a simple GUI to insert the input source code and show the output quadruples, symbol table, and syntax and semantic errors (if exist).
+- [ ] Implement a simple GUI to insert the input source code and show the output quadruples, ast_symbol table, and syntax and semantic errors (if exist).

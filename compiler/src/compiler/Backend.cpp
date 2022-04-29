@@ -406,7 +406,6 @@ namespace s22
 		auto dst = first_available_register(self);
 		self->reg[dst.loc].is_used = true;
 
-		// TODO: Add locations for operands
 		if (op_is_logical(op) == false)
 		{
 			instruction(self, op, dst, opr1, opr2);
@@ -738,7 +737,7 @@ namespace s22
 			auto wh = ast.as_while;
 
 			Label begin_while = { .type = Label::WHILE,     .id = make_label_id() };
-			Label end_while   = { .type = Label::END_WHILE, .id = make_label_id() };
+			Label end_while   = { .type = Label::END_WHILE, .id = begin_while.id };
 
 			instruction(self, begin_while);
 
@@ -755,12 +754,11 @@ namespace s22
 			return {};
 		}
 
-
 		case AST::DO_WHILE: {
 			auto do_wh = ast.as_do_while;
 
 			Label begin_do_while = { .type = Label::WHILE,     .id = make_label_id() };
-			Label end_do_while   = { .type = Label::END_WHILE, .id = make_label_id() };
+			Label end_do_while   = { .type = Label::END_WHILE, .id = begin_do_while.id };
 
 			instruction(self, begin_do_while);
 			for (auto stmt: do_wh->block->stmts)
@@ -775,7 +773,32 @@ namespace s22
 			instruction(self, end_do_while);
 			return {};
 		}
-		case AST::FOR:  		return {}; // TODO: Implement
+
+		case AST::FOR: {
+			auto loop = ast.as_for;
+
+			Label begin_for = { .type = Label::FOR,     .id = make_label_id() };
+			Label end_for   = { .type = Label::END_FOR, .id = begin_for.id };
+
+			// init
+			backend_generate(self, loop->init);
+
+			instruction(self, begin_for);
+			backend_gen_condition(self, loop->cond, end_for);
+			clear_registers(self);
+
+			for (auto stmt: loop->block->stmts)
+				backend_generate(self, stmt);
+
+			// post
+			backend_generate(self, loop->post);
+
+			Operand to_begin_for = { .loc = Operand::LBL, .label = begin_for };
+			instruction(self, I_BR, to_begin_for);
+
+			instruction(self, end_for);
+			return {};
+		}
 
 		case AST::BLOCK: {
 			for (auto stmt: ast.as_block->stmts)

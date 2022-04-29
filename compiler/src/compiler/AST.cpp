@@ -188,7 +188,7 @@ namespace s22
 	}
 
 	AST
-	ast_for(Decl *init, AST cond, Assignment *post, Block *block)
+	ast_for(AST init, AST cond, AST post, Block *block)
 	{
 		AST self = { .kind = AST::FOR };
 

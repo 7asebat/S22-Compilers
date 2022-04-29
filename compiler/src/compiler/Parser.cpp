@@ -565,6 +565,21 @@ namespace s22
 	}
 
 	void
+	Parser::for_loop_begin()
+	{
+		this->block_begin();
+	}
+
+	Parse_Unit
+	Parser::for_loop(Source_Location loc, const Parse_Unit &init, const Parse_Unit &cond, const Parse_Unit &post)
+	{
+		Parse_Unit self = {};
+		auto block = this->block_end();
+		self.ast = ast_for(init.ast, cond.ast, post.ast, block.ast.as_block);
+		return self;
+	}
+
+	void
 	parser_log(const Error &err, Log_Level lvl)
 	{
 		parser_log(err, err.loc, lvl);

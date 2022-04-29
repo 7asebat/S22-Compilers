@@ -204,14 +204,14 @@ namespace s22
 
 	struct For_Loop
 	{
-		Decl *init;
+		AST init;
 		AST cond;
-		Assignment *post;
+		AST post;
 		Block *block;
 	};
 
 	AST
-	ast_for(Decl *init, AST cond, Assignment *post, Block *block);
+	ast_for(AST init, AST cond, AST post, Block *block);
 
 	struct Block
 	{

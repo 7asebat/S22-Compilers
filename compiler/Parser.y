@@ -59,7 +59,7 @@
 %type <unit> expr expr_math expr_logic
 %type <type> type decl_proc_return
 %type <unit> conditional c_else c_else_ifs
-%type <unit> assignment block loop
+%type <unit> assignment block loop loop_for_init loop_for_condition loop_for_post
 %type <unit> decl_var decl_const decl_proc
 
 %printer { symtype_print(yyo, $$); } type
@@ -184,21 +184,24 @@ loop:
     WHILE expr ';'  { $$ = p->do_while_loop(@WHILE, $expr, $block); }
     |
 
-    FOR                                                      { p->block_begin(); }
+    FOR                                                      { p->for_loop_begin(); }
     loop_for_init ';' loop_for_condition ';' loop_for_post
-        block_no_action                                      { $$ = p->block_end(); }
+        block_no_action                                      { $$ = p->for_loop(@FOR, $loop_for_init, $loop_for_condition, $loop_for_post); }
     ;
 
 loop_for_init:
-    decl_var | %empty
+    decl_var
+    | %empty { $$ = {}; }
     ;
 
 loop_for_condition:
-    expr | %empty
+    expr
+    | %empty { $$ = {}; }
     ;
 
 loop_for_post:
-    assignment | expr | %empty
+    assignment | expr
+    | %empty { $$ = {}; }
     ;
 
 decl_var:

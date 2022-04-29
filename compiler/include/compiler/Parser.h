@@ -131,6 +131,12 @@ namespace s22
 		Parse_Unit
 		do_while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block);
 
+		void
+		for_loop_begin();
+
+		Parse_Unit
+		for_loop(Source_Location loc, const Parse_Unit &init, const Parse_Unit &cond, const Parse_Unit &post);
+
 		struct Sw_Case
 		{
 			std::vector<Literal*> group;

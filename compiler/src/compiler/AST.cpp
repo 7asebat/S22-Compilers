@@ -6,13 +6,13 @@
 namespace s22
 {
 	AST
-	ast_literal(Literal literal)
+	ast_literal(Literal *literal)
 	{
 		AST self = { .kind = AST::LITERAL };
 
 		auto &lit = self.as_lit;
 		lit = alloc<Literal>();
-		*lit = literal;
+		*lit = *literal;
 
 		return self;
 	}
@@ -135,26 +135,26 @@ namespace s22
 	}
 
 	AST
-	ast_switch_case(const Buf<Literal> &cases, Block *block)
+	ast_switch_case(AST expr, const Buf<Literal*> &group, Block *block)
 	{
 		AST self = { .kind = AST::SWITCH_CASE };
 
 		auto &swc = self.as_case;
 		swc = alloc<Switch_Case>();
-		swc->cases = cases;
+		swc->expr = expr;
+		swc->group = group;
 		swc->block = block;
 
 		return self;
 	}
 
 	AST
-	ast_switch(AST expr, const Buf<Switch_Case> &cases, Block *case_default)
+	ast_switch(const Buf<Switch_Case*> &cases, Block *case_default)
 	{
 		AST self = { .kind = AST::SWITCH };
 
 		auto &sw = self.as_switch;
 		sw = alloc<Switch>();
-		sw->expr = expr;
 		sw->cases = cases;
 		sw->case_default = case_default;
 

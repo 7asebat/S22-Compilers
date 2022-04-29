@@ -3,6 +3,7 @@
 #include <string>
 #include <format>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace s22
 {
@@ -302,8 +303,7 @@ struct std::formatter<s22::Source_Location> : std::formatter<std::string>
 	auto
 	format(s22::Source_Location loc, format_context &ctx)
 	{
-		return format_to(ctx.out(), "{},{} --- {},{}",
-			loc.first_line, loc.first_column, loc.last_line, loc.last_column);
+		return format_to(ctx.out(), "{},{}", loc.first_line, loc.first_column);
 	}
 };
 

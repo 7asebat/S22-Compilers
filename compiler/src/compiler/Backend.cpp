@@ -349,9 +349,9 @@ namespace s22
 	}
 
 	Operand
-	backend_lit(Backend self, Literal lit)
+	backend_lit(Backend self, Literal *lit)
 	{
-		return { .loc = Operand::IMM, .size = 1, .value = lit.value };
+		return { .loc = Operand::IMM, .size = 1, .value = lit->value };
 	}
 
 	Operand
@@ -462,9 +462,9 @@ namespace s22
 	}
 
 	Label
-	backend_gen_condition(Backend self, AST ast)
+	backend_gen_condition(Backend self, AST ast, Label end_if)
 	{
-		Label end_if = { .type = Label::END_IF, .id = make_label_id() };
+		Operand br_end = { .loc = Operand::LBL, .label = end_if };
 
 		switch (ast.kind)
 		{
@@ -480,15 +480,13 @@ namespace s22
 				opr = reg;
 			}
 
-			Operand br_end = { .loc = Operand::LBL, .label = end_if };
 			instruction(self, I_BZ, br_end, opr);
 			break;
 		}
 
 		case AST::BINARY: {
 			auto bin = ast.as_binary;
-			INSTRUCTION_OP op = (INSTRUCTION_OP)bin->kind;
-			Operand br_end = { .loc = Operand::LBL, .label = end_if };
+			auto op = (INSTRUCTION_OP)bin->kind;
 
 			// cond != 0
 			if (op_is_logical(op) == false)
@@ -569,8 +567,7 @@ namespace s22
 
 		case AST::UNARY: {
 			auto uny = ast.as_unary;
-			INSTRUCTION_OP op = (INSTRUCTION_OP)uny->kind;
-			Operand br_end = { .loc = Operand::LBL, .label = end_if };
+			auto op = (INSTRUCTION_OP)uny->kind;
 
 			// cond != 0
 			if (op_is_logical(op) == false)
@@ -598,6 +595,30 @@ namespace s22
 			break;
 		}
 
+		case AST::SWITCH_CASE: {
+			Label lbl_true = { .type = Label::LABEL, .id = make_label_id() };
+			Operand br_true = { .loc = Operand::LBL, .label = lbl_true };
+
+			auto swc = ast.as_case;
+			// Fetch the expression
+			auto expr = backend_generate(self, swc->expr);
+			if (expr.loc == Operand::MEM)
+			{
+				auto reg = first_available_register(self);
+				instruction(self, I_LD, reg, expr);
+				expr = reg;
+			}
+			// Go to true if any value matches
+			for (auto lit: swc->group)
+			{
+				instruction(self, I_LOG_EQ, br_true, expr, backend_lit(self, lit));
+			}
+
+			instruction(self, I_BR, br_end);
+			instruction(self, lbl_true);
+			break;
+		}
+
 		default:
 			break;
 		}
@@ -610,7 +631,7 @@ namespace s22
 	{
 		switch (ast.kind)
 		{
-		case AST::LITERAL:	return backend_lit(self, *ast.as_lit);
+		case AST::LITERAL:	return backend_lit(self, ast.as_lit);
 		case AST::SYMBOL:	return backend_sym(self, ast.as_sym);
 
 		case AST::PROC_CALL: return {}; // TODO: IMPLEMENT
@@ -667,21 +688,51 @@ namespace s22
 
 			for (auto ifc = ast.as_if; ifc != nullptr; ifc = ifc->next)
 			{
-				auto end_if = backend_gen_condition(self, ifc->cond);
+				Label end_if = { .type = Label::END_IF, .id = make_label_id() };
+				backend_gen_condition(self, ifc->cond, end_if);
 				clear_registers(self);
 
 				for (auto stmt: ifc->block->stmts)
 					backend_generate(self, stmt);
 
-				Operand br_to = { .loc = Operand::LBL, .label = end_all };
-				instruction(self, I_BR, br_to);
+				Operand to_end_all = { .loc = Operand::LBL, .label = end_all };
+				instruction(self, I_BR, to_end_all);
 				instruction(self, end_if);
 			}
+
 			instruction(self, end_all);
+			return {};
 		}
 
-		case AST::SWITCH:  		return {}; // TODO: Implement
-		case AST::SWITCH_CASE:  return {}; // TODO: Implement
+		case AST::SWITCH: {
+			Label end_switch = { .type = Label::END_SWITCH, .id = make_label_id() };
+			AST case_ast = { .kind = AST::SWITCH_CASE };
+
+			auto sw = ast.as_switch;
+
+			for (auto &swc: sw->cases)
+			{
+				Label end_case = { .type = Label::END_CASE, .id = make_label_id() };
+				case_ast.as_case = swc;
+				backend_gen_condition(self, case_ast, end_case);
+				clear_registers(self);
+
+				for (auto stmt: swc->block->stmts)
+					backend_generate(self, stmt);
+
+				Operand to_end_switch = { .loc = Operand::LBL, .label = end_switch };
+				instruction(self, I_BR, to_end_switch);
+				instruction(self, end_case);
+			}
+			if (sw->case_default)
+			{
+				for (auto stmt: sw->case_default->stmts)
+					backend_generate(self, stmt);
+			}
+
+			instruction(self, end_switch);
+			return {};
+		}
 
 		case AST::WHILE:  		return {}; // TODO: Implement
 		case AST::FOR:  		return {}; // TODO: Implement
@@ -689,6 +740,8 @@ namespace s22
 		case AST::BLOCK: {
 			for (auto stmt: ast.as_block->stmts)
 				backend_generate(self, stmt);
+
+			return {};
 		}
 
 		default:

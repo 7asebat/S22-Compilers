@@ -5,27 +5,11 @@
 
 namespace s22
 {
-	struct Literal
-	{
-		union
-		{
-			uint64_t value;
-
-			// Value interpretations
-			uint64_t u64;
-			int64_t s64;
-			double f64;
-			bool b;
-		};
-	};
 	struct Semantic_Expr
 	{
-		enum KIND { VARIABLE, LITERAL } kind;
-
+		bool is_literal;
 		Symbol_Type type;
-
-		// Optional literal value
-		Literal lit;
+		// TODO: UNINITIALIZED VARIABLES
 	};
 
 	enum class Op_Assign

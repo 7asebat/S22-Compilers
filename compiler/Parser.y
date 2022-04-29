@@ -58,7 +58,7 @@
 %type <unit> literal proc_call array_access
 %type <unit> expr expr_math expr_logic
 %type <type> type decl_proc_return
-%type <unit> condition conditional c_else c_else_ifs
+%type <unit> conditional c_else c_else_ifs
 %type <unit> assignment block loop
 %type <unit> decl_var decl_const decl_proc
 
@@ -128,13 +128,13 @@ stmt:
     ;
 
 conditional:
-    IF condition
+    IF expr
         block
-    c_else              { $$ = p->if_cond($condition, $block, $c_else); }
+    c_else              { $$ = p->if_cond($expr, $block, $c_else); }
 
     |
     SWITCH expr         { p->switch_begin(@SWITCH, $expr); }
-    '{' switch_list '}' { p->switch_end(@SWITCH); }
+    '{' switch_list '}' { $$ = p->switch_end(); }
     ;
 
 c_else:
@@ -150,26 +150,9 @@ c_else:
 
 c_else_ifs:
     c_else_ifs
-    ELSE IF condition block { $$ = p->else_if_cond($1, $condition, $block); }
+    ELSE IF expr block { $$ = p->else_if_cond($1, $expr, $block); }
     |
-    ELSE IF condition block { $$ = p->if_cond($condition, $block, {}); }
-    ;
-
-// else_if *
-conditional_else_if:
-    conditional_else_if
-
-    ELSE IF condition   { p->else_if_begin(@ELSE, $condition); }
-        block
-
-    | %empty
-    ;
-
-// else ?
-conditional_else:
-    ELSE                { p->else_begin(@ELSE); }
-        block
-    | %empty
+    ELSE IF expr block { $$ = p->if_cond($expr, $block, {}); }
     ;
 
 // case *
@@ -179,12 +162,10 @@ switch_list:
     ;
 
 switch_case:
-    CASE                { p->switch_case_begin(@CASE); }
-    switch_literal_list { p->switch_case_end(@CASE); }
-        block
+    CASE                        { p->switch_case_begin(@CASE); }
+    switch_literal_list block   { p->switch_case_end(@CASE, $block); }
     |
-    DEFAULT             { p->switch_default(@DEFAULT); }
-        block
+    DEFAULT block               { p->switch_default(@DEFAULT, $block); }
     ;
 
 
@@ -194,13 +175,13 @@ switch_literal_list:
     ;
 
 loop:
-    WHILE condition         { p->while_begin(@WHILE, $condition); }
+    WHILE expr         { p->while_begin(@WHILE, $expr); }
         block               { p->while_end(@WHILE); }
     |
 
     DO                      { p->do_while_begin(@DO); }
         block
-    WHILE condition ';'     { p->do_while_end(@DO, $condition); }
+    WHILE expr ';'     { p->do_while_end(@DO, $expr); }
     |
 
     FOR                                                      { p->block_begin(); }
@@ -213,15 +194,12 @@ loop_for_init:
     ;
 
 loop_for_condition:
-    condition | %empty
+    expr | %empty
     ;
 
 loop_for_post:
     assignment | expr | %empty
     ;
-
-condition:
-    expr { $$ = $expr; };
 
 decl_var:
     IDENTIFIER ':' type                     { $$ = p->decl(@IDENTIFIER, $IDENTIFIER, $type); }

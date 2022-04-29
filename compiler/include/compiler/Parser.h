@@ -12,7 +12,7 @@ namespace s22
 {
 	struct Parse_Unit
 	{
-		Semantic_Expr expr;
+		Semantic_Expr smxp;
 		Operand opr;
 		AST ast;
 		Source_Location loc;
@@ -75,7 +75,7 @@ namespace s22
 		pcall_begin();
 
 		void
-		pcall_add(const Parse_Unit &unit);
+		pcall_add(const Parse_Unit &arg);
 
 		Parse_Unit
 		pcall(Source_Location loc, const Str &id);
@@ -104,23 +104,26 @@ namespace s22
 		Parse_Unit
 		else_if_cond(Parse_Unit &prev, const Parse_Unit &cond, const Parse_Unit &block);
 
-		void
-		switch_begin(Source_Location loc, const Parse_Unit &unit);
+		Parse_Unit
+		switch_stmt(const Parse_Unit &expr);
 
 		void
-		switch_end(Source_Location loc);
+		switch_begin(Source_Location loc, const Parse_Unit &expr);
+
+		Parse_Unit
+		switch_end();
 
 		void
 		switch_case_begin(Source_Location loc);
 
 		void
-		switch_case_end(Source_Location loc);
+		switch_case_end(Source_Location loc, const Parse_Unit &block);
 
 		void
-		switch_case_add(const Parse_Unit &unit);
+		switch_case_add(const Parse_Unit &literal);
 
 		void
-		switch_default(Source_Location loc);
+		switch_default(Source_Location loc, const Parse_Unit &block);
 
 		void
 		while_begin(Source_Location loc, const Parse_Unit &cond);
@@ -135,42 +138,24 @@ namespace s22
 		do_while_end(Source_Location loc, const Parse_Unit &cond);
 
 		Scope global;
-		Scope *current_scope;
 
-		std::stack<std::vector<Parse_Unit>> proc_call_arguments_stack;
-		std::stack<std::vector<AST>> block_stmts_stack;
-
-		struct Switch_Case
+		struct Sw_Case
 		{
-			uint64_t value;
-			size_t partition;
-
-			struct Hash
-			{
-				using SWC = Switch_Case;
-				inline size_t
-				operator()(const SWC &self) const { return std::hash<uint64_t>{}(self.value); }
-			};
-
-			struct Pred
-			{
-				using SWC = Switch_Case;
-				inline bool
-				operator()(const SWC &lhs, const SWC &rhs) const
-				{
-					bool equal = lhs.value == rhs.value;
-
-					if (lhs.partition == size_t(-1) || rhs.partition == size_t(-1))
-						equal &= lhs.partition == rhs.partition;
-
-					return equal;
-				}
-			};
+			std::vector<Literal*> group;
+			Switch_Case *ast_sw_case;
 		};
-		constexpr static Switch_Case SWC_DEFAULT = { .partition = size_t(-1) };
 
-		std::unordered_set<Switch_Case, Switch_Case::Hash, Switch_Case::Pred> switch_cases;
-		size_t switch_current_partition;
+		struct Context
+		{
+			Scope *scope;
+			std::vector<Parse_Unit> proc_call_arguments;
+			std::vector<AST> block_stmts;
+
+			AST switch_expr;
+			std::vector<Sw_Case> switch_cases;
+			Block *switch_default;
+		};
+		std::stack<Context> context;
 
 		Backend backend;
 	};

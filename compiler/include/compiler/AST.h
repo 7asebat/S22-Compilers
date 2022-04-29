@@ -61,8 +61,25 @@ namespace s22
 		};
 	};
 
+	struct Literal
+	{
+		union
+		{
+			uint64_t value;
+
+			// Value interpretations
+			uint64_t u64;
+			int64_t s64;
+			double f64;
+			bool b;
+		};
+
+		inline bool
+		operator==(const Literal &other) { return this->value == other.value; }
+	};
+
 	AST
-	ast_literal(Literal literal);
+	ast_literal(Literal *literal);
 
 	AST
 	ast_symbol(Symbol *sym);
@@ -147,23 +164,22 @@ namespace s22
 
 	struct Switch_Case
 	{
-		Buf<Literal> cases;
+		AST expr;
+		Buf<Literal*> group;
 		Block *block;
 	};
 
 	AST
-	ast_switch_case(const Buf<Literal> &cases, Block *block);
+	ast_switch_case(AST expr, const Buf<Literal*> &group, Block *block);
 
 	struct Switch
 	{
-		AST expr;
-		Buf<Switch_Case> cases;
-		// Optional
+		Buf<Switch_Case*> cases;
 		Block *case_default;
 	};
 
 	AST
-	ast_switch(AST expr, const Buf<Switch_Case> &cases, Block *case_default);
+	ast_switch(const Buf<Switch_Case*> &cases, Block *case_default);
 
 	struct While_Loop
 	{

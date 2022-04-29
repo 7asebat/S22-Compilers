@@ -107,7 +107,7 @@ namespace s22
 	backend_decl_expr(Backend self, const Symbol *sym, const Parse_Unit &right);
 
 	Operand
-	backend_lit(Backend self, Literal lit);
+	backend_lit(Backend self, Literal *lit);
 
 	Operand
 	backend_sym(Backend self, const Symbol *sym);

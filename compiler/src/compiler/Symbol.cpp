@@ -121,7 +121,7 @@ namespace s22
 		if (expr.err)
 			return expr.err;
 
-		if (symbol.type != expr.expr.type)
+		if (symbol.type != expr.smxp.type)
 			return Error{expr.loc, "type mismatch"};
 
 		auto [sym, sym_err] = scope_add_decl(self, symbol);

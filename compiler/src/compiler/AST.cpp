@@ -120,13 +120,14 @@ namespace s22
 	}
 
 	AST
-	ast_if(AST cond, If_Condition *next, Block *block)
+	ast_if(If_Condition *prev, AST cond, Block *block, If_Condition *next)
 	{
 		AST self = { .kind = AST::IF_COND };
 
 		auto &if_cond = self.as_if;
 		if_cond = alloc<If_Condition>();
 		if_cond->cond = cond;
+		if_cond->prev = prev;
 		if_cond->next = next;
 		if_cond->block = block;
 

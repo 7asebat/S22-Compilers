@@ -50,8 +50,8 @@ proc     return PROC;
 return   return RETURN;
 "->"     return ARROW;
 
-true     yylval->value.b = 1; return TRUE;
-false    yylval->value.b = 0; return FALSE;
+true     yylval->value.value = 1; return TRUE;
+false    yylval->value.value = 0; return FALSE;
 
 int      return INT;
 uint     return UINT;

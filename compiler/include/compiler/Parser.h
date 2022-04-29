@@ -99,19 +99,10 @@ namespace s22
 		decl_proc_end(const Str &id, Symbol_Type return_type);
 
 		Parse_Unit
-		condition(const Parse_Unit &unit);
+		if_cond(const Parse_Unit &cond, const Parse_Unit &block, const Parse_Unit &next);
 
-		void
-		if_begin(Source_Location loc, const Parse_Unit &cond);
-
-		void
-		else_if_begin(Source_Location loc, const Parse_Unit &cond);
-
-		void
-		else_begin(Source_Location loc);
-
-		void
-		if_end(Source_Location loc);
+		Parse_Unit
+		else_if_cond(Parse_Unit &prev, const Parse_Unit &cond, const Parse_Unit &block);
 
 		void
 		switch_begin(Source_Location loc, const Parse_Unit &unit);

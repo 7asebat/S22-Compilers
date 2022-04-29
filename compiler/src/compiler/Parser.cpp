@@ -86,38 +86,31 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::condition(const Parse_Unit &unit)
+	Parser::if_cond(const Parse_Unit &cond, const Parse_Unit &block, const Parse_Unit &next)
 	{
-		Parse_Unit self = unit;
+		Parse_Unit self = {};
 
-		// TODO: Implement
-		// Turn last expression into a condition
+		If_Condition *next_if = {};
+		if (next.ast.kind != AST::NIL)
+		{
+			// Find the earliest point to join
+			for (auto n = next.ast.as_if; n != nullptr; n = n->prev)
+				next_if = n;
+		}
 
+		self.ast = ast_if({}, cond.ast, block.ast.as_block, next_if);
 		return self;
 	}
 
-	void
-	Parser::if_begin(Source_Location loc, const Parse_Unit &cond)
+	Parse_Unit
+	Parser::else_if_cond(Parse_Unit &prev, const Parse_Unit &cond, const Parse_Unit &block)
 	{
-		// TODO: Implement
-	}
+		auto else_if = ast_if(prev.ast.as_if, cond.ast, block.ast.as_block, {});
+		prev.ast.as_if->next = else_if.as_if;
 
-	void
-	Parser::else_if_begin(Source_Location loc, const Parse_Unit &cond)
-	{
-		// TODO: Implement
-	}
-
-	void
-	Parser::else_begin(Source_Location loc)
-	{
-		// TODO: Implement
-	}
-
-	void
-	Parser::if_end(Source_Location loc)
-	{
-		// TODO: Implement
+		Parse_Unit self = {};
+		self.ast = else_if;
+		return self;
 	}
 
 	Parse_Unit

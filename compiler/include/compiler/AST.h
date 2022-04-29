@@ -135,15 +135,15 @@ namespace s22
 
 	struct If_Condition
 	{
-		// Optional
-		AST cond;
-		// Optional
-		If_Condition *next;
+		AST cond; 				// NIL for else
+		If_Condition *prev;		// NIL for if
+		If_Condition *next;		// NIL for else
+
 		Block *block;
 	};
 
 	AST
-	ast_if(AST cond, If_Condition *next, Block *block);
+	ast_if(If_Condition *prev, AST cond, Block *block, If_Condition *next);
 
 	struct Switch_Case
 	{

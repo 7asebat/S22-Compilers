@@ -58,7 +58,7 @@
 %type <unit> literal proc_call array_access
 %type <unit> expr expr_math expr_logic
 %type <type> type decl_proc_return
-%type <unit> condition
+%type <unit> condition conditional c_else c_else_ifs
 %type <unit> assignment block loop
 %type <unit> decl_var decl_const decl_proc
 
@@ -128,14 +128,31 @@ stmt:
     ;
 
 conditional:
-    IF condition        { p->if_begin(@IF, $condition); }
+    IF condition
         block
-    conditional_else_if
-    conditional_else    { p->if_end(@IF); }
+    c_else              { $$ = p->if_cond($condition, $block, $c_else); }
 
     |
     SWITCH expr         { p->switch_begin(@SWITCH, $expr); }
     '{' switch_list '}' { p->switch_end(@SWITCH); }
+    ;
+
+c_else:
+    %empty              { $$ = {}; }
+    |
+    c_else_ifs          { $$ = $c_else_ifs; };
+    |
+    c_else_ifs
+    ELSE block          { $$ = p->else_if_cond($1, {}, $block); }
+    |
+    ELSE block          { $$ = p->if_cond({}, $block, {}); }
+    ;
+
+c_else_ifs:
+    c_else_ifs
+    ELSE IF condition block { $$ = p->else_if_cond($1, $condition, $block); }
+    |
+    ELSE IF condition block { $$ = p->if_cond($condition, $block, {}); }
     ;
 
 // else_if *
@@ -204,7 +221,7 @@ loop_for_post:
     ;
 
 condition:
-    expr { $$ = p->condition($expr); };
+    expr { $$ = $expr; };
 
 decl_var:
     IDENTIFIER ':' type                     { $$ = p->decl(@IDENTIFIER, $IDENTIFIER, $type); }

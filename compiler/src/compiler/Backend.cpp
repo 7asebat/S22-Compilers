@@ -67,6 +67,13 @@ namespace s22
 		self->program.push_back(ins);
 	}
 
+	inline static void
+	instruction(Backend self, Label label)
+	{
+		Instruction ins = { .label = label };
+		self->program.push_back(ins);
+	}
+
 	inline static bool
 	op_is_logical(INSTRUCTION_OP op)
 	{
@@ -88,7 +95,7 @@ namespace s22
 	}
 
 	inline static INSTRUCTION_OP
-	invert_condition(INSTRUCTION_OP op)
+	invert_op(INSTRUCTION_OP op)
 	{
 		if (op_is_logical(op) == false)
 			return op;
@@ -250,11 +257,7 @@ namespace s22
 
 		// b_inv $end_if, op1, op2
 		br.label = end_if;
-		auto op_inv = invert_condition(ins.op);
-		if (op_inv == I_BZ || op_inv == I_BNZ)
-			instruction(self, op_inv, br, ins.src1);
-		else
-			instruction(self, op_inv, br, ins.src1, ins.src2);
+		instruction(self, invert_op(ins.op), br, ins.src1, ins.src2);
 
 		// mov dst, 1
 		instruction(self, I_MOV, ins.dst, OPR_ONE);
@@ -458,16 +461,153 @@ namespace s22
 		return dst;
 	}
 
-	void
-	backend_condition(Backend self)
+	Label
+	backend_gen_condition(Backend self, AST ast)
 	{
-		// Generate condition
+		Label end_if = { .type = Label::END_IF, .id = make_label_id() };
+
+		switch (ast.kind)
+		{
+		case AST::NIL: // ELSE branch
+			break;
+
+		case AST::LITERAL: case AST::SYMBOL: case AST::PROC_CALL: case AST::ARRAY_ACCESS: {
+			auto opr = backend_generate(self, ast);
+			if (opr.loc == Operand::MEM)
+			{
+				auto reg = first_available_register(self);
+				instruction(self, I_LD, reg, opr);
+				opr = reg;
+			}
+
+			Operand br_end = { .loc = Operand::LBL, .label = end_if };
+			instruction(self, I_BZ, br_end, opr);
+			break;
+		}
+
+		case AST::BINARY: {
+			auto bin = ast.as_binary;
+			INSTRUCTION_OP op = (INSTRUCTION_OP)bin->kind;
+			Operand br_end = { .loc = Operand::LBL, .label = end_if };
+
+			// cond != 0
+			if (op_is_logical(op) == false)
+			{
+				auto opr = backend_generate(self, ast);
+				instruction(self, I_BZ, br_end, opr);
+			}
+			else if (op == I_LOG_AND)
+			{
+				auto left = backend_generate(self, bin->left);
+				if (left.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, left);
+					left = reg;
+				}
+				instruction(self, I_BZ, br_end, left);
+
+				auto right = backend_generate(self, bin->right);
+				if (right.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, right);
+					right = reg;
+				}
+				instruction(self, I_BZ, br_end, right);
+			}
+			else if (op == I_LOG_OR)
+			{
+				Label lbl_true = { .type = Label::LABEL, .id = make_label_id() };
+				Operand br_true = { .loc = Operand::LBL, .label = lbl_true };
+
+				auto left = backend_generate(self, bin->left);
+				if (left.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, left);
+					left = reg;
+				}
+				instruction(self, I_BNZ, br_true, left);
+
+				auto right = backend_generate(self, bin->right);
+				if (right.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, right);
+					right = reg;
+				}
+				instruction(self, I_BNZ, br_true, right);
+
+				instruction(self, I_BR, br_end);
+				instruction(self, lbl_true);
+			}
+			else
+			{
+				auto left = backend_generate(self, bin->left);
+				if (left.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, left);
+					left = reg;
+
+					self->reg[left.loc].is_used = true;
+				}
+
+				auto right = backend_generate(self, bin->right);
+				if (right.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, right);
+					right = reg;
+				}
+
+				instruction(self, invert_op(op), br_end, left, right);
+			}
+			break;
+		}
+
+		case AST::UNARY: {
+			auto uny = ast.as_unary;
+			INSTRUCTION_OP op = (INSTRUCTION_OP)uny->kind;
+			Operand br_end = { .loc = Operand::LBL, .label = end_if };
+
+			// cond != 0
+			if (op_is_logical(op) == false)
+			{
+				auto opr = backend_generate(self, ast);
+				if (opr.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, opr);
+					opr = reg;
+				}
+				instruction(self, I_BZ, br_end, opr);
+			}
+			else // NOT
+			{
+				auto opr = backend_generate(self, uny->right);
+				if (opr.loc == Operand::MEM)
+				{
+					auto reg = first_available_register(self);
+					instruction(self, I_LD, reg, opr);
+					opr = reg;
+				}
+				instruction(self, I_BNZ, br_end, opr);
+			}
+			break;
+		}
+
+		default:
+			break;
+		}
+
+		return end_if;
 	}
 
 	Operand
 	backend_generate(Backend self, AST ast)
 	{
-		// Post-order traverse the tree
 		switch (ast.kind)
 		{
 		case AST::LITERAL:	return backend_lit(self, *ast.as_lit);
@@ -522,7 +662,24 @@ namespace s22
 
 		case AST::DECL_PROC: 	return {}; // TODO: Implement
 
-		case AST::IF_COND:  	return {}; // TODO: Implement
+		case AST::IF_COND: {
+			Label end_all = { .type = Label::END_ALL, .id = make_label_id() };
+
+			for (auto ifc = ast.as_if; ifc != nullptr; ifc = ifc->next)
+			{
+				auto end_if = backend_gen_condition(self, ifc->cond);
+				clear_registers(self);
+
+				for (auto stmt: ifc->block->stmts)
+					backend_generate(self, stmt);
+
+				Operand br_to = { .loc = Operand::LBL, .label = end_all };
+				instruction(self, I_BR, br_to);
+				instruction(self, end_if);
+			}
+			instruction(self, end_all);
+		}
+
 		case AST::SWITCH:  		return {}; // TODO: Implement
 		case AST::SWITCH_CASE:  return {}; // TODO: Implement
 

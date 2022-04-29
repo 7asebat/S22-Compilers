@@ -175,13 +175,13 @@ switch_literal_list:
     ;
 
 loop:
-    WHILE expr         { p->while_begin(@WHILE, $expr); }
-        block               { p->while_end(@WHILE); }
+    WHILE expr
+        block       { $$ = p->while_loop(@WHILE, $expr, $block); }
     |
 
-    DO                      { p->do_while_begin(@DO); }
+    DO
         block
-    WHILE expr ';'     { p->do_while_end(@DO, $expr); }
+    WHILE expr ';'  { $$ = p->do_while_loop(@WHILE, $expr, $block); }
     |
 
     FOR                                                      { p->block_begin(); }
@@ -306,7 +306,7 @@ expr_math:
 expr_logic:
     '!' expr %prec U_LOGICAL    { $$ = p->unary(@1, Uny::NOT, $expr); }
 
-    | expr '<' expr             { $$ = p->binary(@2, $1, Bin::SHR,   $3); }
+    | expr '<' expr             { $$ = p->binary(@2, $1, Bin::LT,    $3); }
     | expr LEQ expr             { $$ = p->binary(@2, $1, Bin::LEQ,   $3); }
     | expr EQ expr              { $$ = p->binary(@2, $1, Bin::EQ,    $3); }
     | expr NEQ expr             { $$ = p->binary(@2, $1, Bin::NEQ,   $3); }

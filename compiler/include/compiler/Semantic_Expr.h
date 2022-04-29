@@ -43,17 +43,17 @@ namespace s22
 		SHL = I_SHL, // A << B
 		SHR = I_SHR, // A >> B
 
-		LT,  // A < B
-		LEQ, // A <= B
+		LT  = I_LOG_LT,   	// A < B
+		LEQ = I_LOG_LEQ, 	// A <= B
 
-		EQ,  // A == B
-		NEQ, // A != B
+		EQ  = I_LOG_EQ,   	// A == B
+		NEQ = I_LOG_NEQ, 	// A != B
 
-		GT,  // A > B
-		GEQ, // A >= B
+		GT  = I_LOG_GT,   	// A > B
+		GEQ = I_LOG_GEQ, 	// A >= B
 
-		L_AND,  // A && B
-		L_OR,   // A || B
+		L_AND = I_LOG_AND, 	// A && B
+		L_OR  = I_LOG_OR,   // A || B
 	};
 
 	enum class Uny
@@ -94,87 +94,3 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params);
 }
-
-template <>
-struct std::formatter<s22::Op_Assign> : std::formatter<std::string>
-{
-	auto
-	format(s22::Op_Assign op, format_context &ctx)
-	{
-		using s22::Op_Assign;
-
-		switch (op)
-		{
-		case Op_Assign::MOV: return format_to(ctx.out(), "MOV");
-		case Op_Assign::ADD: return format_to(ctx.out(), "ADD");
-		case Op_Assign::SUB: return format_to(ctx.out(), "SUB");
-		case Op_Assign::MUL: return format_to(ctx.out(), "MUL");
-		case Op_Assign::DIV: return format_to(ctx.out(), "DIV");
-		case Op_Assign::MOD: return format_to(ctx.out(), "MOD");
-
-		case Op_Assign::AND: return format_to(ctx.out(), "AND");
-		case Op_Assign::OR:  return format_to(ctx.out(), "OR");
-		case Op_Assign::XOR: return format_to(ctx.out(), "XOR");
-		case Op_Assign::SHL: return format_to(ctx.out(), "SHL");
-		case Op_Assign::SHR: return format_to(ctx.out(), "SHR");
-		}
-
-		return ctx.out();
-	}
-};
-
-template <>
-struct std::formatter<s22::Bin> : std::formatter<std::string>
-{
-	auto
-	format(s22::Bin op, format_context &ctx)
-	{
-		using s22::Bin;
-
-		switch (op)
-		{
-		case Bin::ADD: return format_to(ctx.out(), "ADD");
-		case Bin::SUB: return format_to(ctx.out(), "SUB");
-		case Bin::MUL: return format_to(ctx.out(), "MUL");
-		case Bin::DIV: return format_to(ctx.out(), "DIV");
-		case Bin::MOD: return format_to(ctx.out(), "MOD");
-
-		case Bin::AND: return format_to(ctx.out(), "AND");
-		case Bin::OR: return format_to(ctx.out(), "OR");
-		case Bin::XOR: return format_to(ctx.out(), "XOR");
-		case Bin::SHL: return format_to(ctx.out(), "SHL");
-		case Bin::SHR: return format_to(ctx.out(), "SHR");
-
-		// Branch conditions
-		case Bin::LT: return format_to(ctx.out(), "LT");
-		case Bin::LEQ: return format_to(ctx.out(), "LEQ");
-		case Bin::EQ: return format_to(ctx.out(), "EQ");
-		case Bin::NEQ: return format_to(ctx.out(), "NEQ");
-		case Bin::GT: return format_to(ctx.out(), "GT");
-		case Bin::GEQ: return format_to(ctx.out(), "GEQ");
-
-		// L_AND, L_OR do not correspond to instructions
-		}
-
-		return ctx.out();
-	}
-};
-
-template <>
-struct std::formatter<s22::Uny> : std::formatter<std::string>
-{
-	auto
-	format(s22::Uny op, format_context &ctx)
-	{
-		using s22::Uny;
-
-		switch (op)
-		{
-		case Uny::NOT: return format_to(ctx.out(), "NOT");
-		case Uny::NEG: return format_to(ctx.out(), "NEG");
-		case Uny::INV: return format_to(ctx.out(), "INV");
-		}
-
-		return ctx.out();
-	}
-};

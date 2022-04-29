@@ -462,9 +462,9 @@ namespace s22
 	}
 
 	Label
-	backend_gen_condition(Backend self, AST ast, Label end_if)
+	backend_gen_condition(Backend self, AST ast, Label end_block)
 	{
-		Operand br_end = { .loc = Operand::LBL, .label = end_if };
+		Operand br_end = { .loc = Operand::LBL, .label = end_block };
 
 		switch (ast.kind)
 		{
@@ -623,7 +623,7 @@ namespace s22
 			break;
 		}
 
-		return end_if;
+		return end_block;
 	}
 
 	Operand
@@ -734,7 +734,47 @@ namespace s22
 			return {};
 		}
 
-		case AST::WHILE:  		return {}; // TODO: Implement
+		case AST::WHILE: {
+			auto wh = ast.as_while;
+
+			Label begin_while = { .type = Label::WHILE,     .id = make_label_id() };
+			Label end_while   = { .type = Label::END_WHILE, .id = make_label_id() };
+
+			instruction(self, begin_while);
+
+			backend_gen_condition(self, wh->cond, end_while);
+			clear_registers(self);
+
+			for (auto stmt: wh->block->stmts)
+				backend_generate(self, stmt);
+
+			Operand to_begin_while = { .loc = Operand::LBL, .label = begin_while };
+			instruction(self, I_BR, to_begin_while);
+
+			instruction(self, end_while);
+			return {};
+		}
+
+
+		case AST::DO_WHILE: {
+			auto do_wh = ast.as_do_while;
+
+			Label begin_do_while = { .type = Label::WHILE,     .id = make_label_id() };
+			Label end_do_while   = { .type = Label::END_WHILE, .id = make_label_id() };
+
+			instruction(self, begin_do_while);
+			for (auto stmt: do_wh->block->stmts)
+				backend_generate(self, stmt);
+
+			backend_gen_condition(self, do_wh->cond, end_do_while);
+			clear_registers(self);
+
+			Operand to_begin_do_while = { .loc = Operand::LBL, .label = begin_do_while };
+			instruction(self, I_BR, to_begin_do_while);
+
+			instruction(self, end_do_while);
+			return {};
+		}
 		case AST::FOR:  		return {}; // TODO: Implement
 
 		case AST::BLOCK: {

@@ -548,28 +548,20 @@ namespace s22
 		ctx.switch_default = block.ast.as_block;
 	}
 
-	void
-	Parser::while_begin(Source_Location loc, const Parse_Unit &cond)
+	Parse_Unit
+	Parser::while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block)
 	{
-		// TODO: Implement
+		Parse_Unit self = {};
+		self.ast = ast_while(cond.ast, block.ast.as_block);
+		return self;
 	}
 
-	void
-	Parser::while_end(Source_Location loc)
+	Parse_Unit
+	Parser::do_while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block)
 	{
-		// TODO: Implement
-	}
-
-	void
-	Parser::do_while_begin(Source_Location loc)
-	{
-		// TODO: Implement
-	}
-
-	void
-	Parser::do_while_end(Source_Location loc, const Parse_Unit &cond)
-	{
-		// TODO: Implement
+		Parse_Unit self = {};
+		self.ast = ast_do_while(cond.ast, block.ast.as_block);
+		return self;
 	}
 
 	void

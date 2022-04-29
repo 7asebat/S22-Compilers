@@ -175,6 +175,19 @@ namespace s22
 	}
 
 	AST
+	ast_do_while(AST cond, Block *block)
+	{
+		AST self = { .kind = AST::DO_WHILE };
+
+		auto &loop = self.as_do_while;
+		loop = alloc<Do_While_Loop>();
+		loop->cond = cond;
+		loop->block = block;
+
+		return self;
+	}
+
+	AST
 	ast_for(Decl *init, AST cond, Assignment *post, Block *block)
 	{
 		AST self = { .kind = AST::FOR };

@@ -16,6 +16,7 @@ namespace s22
 	struct Switch_Case;
 	struct Switch;
 	struct While_Loop;
+	struct Do_While_Loop;
 	struct For_Loop;
 	struct Block;
 
@@ -34,6 +35,7 @@ namespace s22
 			SWITCH, SWITCH_CASE,
 
 			WHILE,
+			DO_WHILE,
 			FOR,
 
 			BLOCK,
@@ -56,6 +58,7 @@ namespace s22
 			Switch *as_switch;
 			Switch_Case *as_case;
 			While_Loop *as_while;
+			Do_While_Loop *as_do_while;
 			For_Loop *as_for;
 			Block *as_block;
 		};
@@ -189,6 +192,15 @@ namespace s22
 
 	AST
 	ast_while(AST cond, Block *block);
+
+	struct Do_While_Loop
+	{
+		AST cond;
+		Block *block;
+	};
+
+	AST
+	ast_do_while(AST cond, Block *block);
 
 	struct For_Loop
 	{

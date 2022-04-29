@@ -125,19 +125,11 @@ namespace s22
 		void
 		switch_default(Source_Location loc, const Parse_Unit &block);
 
-		void
-		while_begin(Source_Location loc, const Parse_Unit &cond);
+		Parse_Unit
+		while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block);
 
-		void
-		while_end(Source_Location loc);
-
-		void
-		do_while_begin(Source_Location loc);
-
-		void
-		do_while_end(Source_Location loc, const Parse_Unit &cond);
-
-		Scope global;
+		Parse_Unit
+		do_while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block);
 
 		struct Sw_Case
 		{
@@ -155,8 +147,9 @@ namespace s22
 			std::vector<Sw_Case> switch_cases;
 			Block *switch_default;
 		};
-		std::stack<Context> context;
 
+		Scope global;
+		std::stack<Context> context;
 		Backend backend;
 	};
 

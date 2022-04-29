@@ -1,12 +1,8 @@
-x: int;
-switch x
+x: int = 10;
+while (x > 5)
 {
-    case 1, 2, 3 {
-        switch x + 5 {
-            case 6, 7   { x = 4; }
-            default     { x = 5; }
-        }
-    }
-    case 4, 5           { x = 10; }
-    default             { x = 11; }
+    do
+    {
+        x + 1;
+    } while x > 1;
 }

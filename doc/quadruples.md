@@ -1,16 +1,12 @@
 # Quadruples
 
 > ### _Notes_
-> - `V` is either a GP register (`Rx`) or an immediate value (`#Imm`)
+> - `V` is either a GP register (`Rx`), an immediate value (`42`), or a memory location (`base+index+offset`)
 > - `L` is a label
 > - `x` is a variable label
 
 | op      | dst  | arg1   | arg2   | Description                                       |
 | ------- |------|--------|--------|---------------------------------------------------|
-| `LD`    | `Rx` | `x`    |        | Load contents of memory address `x` into `Rx`     |
-| `LD`    | `Rx` | `V`    | `(Ry)` | Load contents of memory address `Ry[V]` into `Rx` |
-| `ST`    | `x`  | `V`    |        | Stores `V` into memory address `x`                |
-| `ST`    | `V1` | `(Rx)` | `V2`   | Stores `V2` into memory address `Rx[V1]`          |
 | `PUSH`  |      | `V`    |        | Push `V` onto the stack                           |
 | `POP`   | `Rx` |        |        | Pop from the stack into `Rx`                      |
 | `OP`    | `Rx` | `V`    |        | `Rx = op V`                                       |

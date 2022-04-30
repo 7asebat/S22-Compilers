@@ -9,24 +9,8 @@
 
 namespace s22
 {
-	struct Symbol_Type;
-	struct Procedure
-	{
-		Buf<Symbol_Type> parameters;
-		Optional<Symbol_Type> return_type;
-
-		inline bool
-		operator==(const Procedure &other) const
-		{
-			if (parameters != other.parameters)
-				return false;
-
-			if (return_type != other.return_type)
-				return false;
-
-			return true;
-		}
-	};
+	struct Parse_Unit;
+	struct Procedure;
 
 	struct Symbol_Type
 	{
@@ -51,10 +35,10 @@ namespace s22
 			if (base != other.base)
 				return false;
 
-			if (procedure != other.procedure)
+			if (array != other.array)
 				return false;
 
-			if (array != other.array)
+			if (procedure != other.procedure)
 				return false;
 
 			return true;
@@ -62,6 +46,24 @@ namespace s22
 
 		inline bool
 		operator!=(const Symbol_Type &other) const { return !operator==(other); }
+	};
+
+	struct Procedure
+	{
+		Buf<Symbol_Type> parameters;
+		Symbol_Type return_type;
+
+		inline bool
+		operator==(const Procedure &other) const
+		{
+			if (parameters != other.parameters)
+				return false;
+
+			if (return_type != other.return_type)
+				return false;
+
+			return true;
+		}
 	};
 
 	constexpr Symbol_Type SYMTYPE_VOID  = { .base = Symbol_Type::VOID };
@@ -102,7 +104,6 @@ namespace s22
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol);
 
-	struct Parse_Unit;
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol, const Parse_Unit &expr);
 
@@ -128,6 +129,7 @@ struct std::formatter<s22::Symbol_Type> : std::formatter<std::string>
 	auto
 	format(const s22::Symbol_Type &type, format_context &ctx)
 	{
+		using namespace s22;
 		if (type.procedure)
 		{
 			format_to(ctx.out(), "proc(");
@@ -136,7 +138,7 @@ struct std::formatter<s22::Symbol_Type> : std::formatter<std::string>
 			}
 			format_to(ctx.out(), ")");
 
-			if (type.procedure->return_type)
+			if (type.procedure->return_type != SYMTYPE_VOID)
 			{
 				format_to(ctx.out(), " -> ");
 				format_to(ctx.out(), "{}", type.procedure->return_type);

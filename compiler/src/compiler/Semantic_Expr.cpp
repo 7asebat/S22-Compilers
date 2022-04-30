@@ -156,7 +156,7 @@ namespace s22
 		}
 
 		Semantic_Expr self {};
-		self.type = sym->type.procedure->return_type | SYMTYPE_VOID;
+		self.type = sym->type.procedure->return_type;
 
 		return self;
 	}

@@ -26,14 +26,14 @@ namespace s22
 	}
 
 	Result<Semantic_Expr>
-	semexpr_assign(Scope *scope, const char *id, const Parse_Unit &right, Op_Assign op)
+	semexpr_assign(Scope *scope, const char *id, const Parse_Unit &right, Asn op)
 	{
 		auto sym = scope_get_id(scope, id);
 		if (sym == nullptr)
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
-		if (sym->type != right.smxp.type)
+		if (sym->type != right.semexpr.type)
 			return Error{ "type mismatch" };
 
 		if (sym->is_constant || sym->type.procedure)
@@ -47,13 +47,13 @@ namespace s22
 	}
 
 	Result<Semantic_Expr>
-	semexpr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Assign op)
+	semexpr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Asn op)
 	{
-		if (left.smxp.type != right.smxp.type)
+		if (left.semexpr.type != right.semexpr.type)
 			return Error{ "type mismatch" };
 
 		Semantic_Expr self = {};
-		self.type = left.smxp.type;
+		self.type = left.semexpr.type;
 		return self;
 	}
 
@@ -61,10 +61,10 @@ namespace s22
 	semexpr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Bin op)
 	{
 		// TODO: Cast to boolean
-		if (left.smxp.type != right.smxp.type)
+		if (left.semexpr.type != right.semexpr.type)
 			return Error{ "type mismatch" };
 
-		if (symtype_allows_arithmetic(left.smxp.type) == false)
+		if (symtype_allows_arithmetic(left.semexpr.type) == false)
 			return Error{ left.loc, "invalid operand" };
 
 		Semantic_Expr self = {};
@@ -80,7 +80,7 @@ namespace s22
 		case Bin::XOR:
 		case Bin::SHL:
 		case Bin::SHR:
-			self.type = left.smxp.type;
+			self.type = left.semexpr.type;
 			break;
 
 		case Bin::LT:
@@ -101,13 +101,13 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_unary(Scope *scope, const Parse_Unit &right, Uny op)
 	{
-		if (symtype_allows_arithmetic(right.smxp.type) == false)
+		if (symtype_allows_arithmetic(right.semexpr.type) == false)
 			return Error{ right.loc, "invalid operand" };
 
 		Semantic_Expr self = {};
 
 		if (op != Uny::NOT)
-			self.type = right.smxp.type;
+			self.type = right.semexpr.type;
 		else
 			self.type = SYMTYPE_BOOL;
 
@@ -125,7 +125,7 @@ namespace s22
 		if (sym->type.array == false)
 			return Error{ "type cannot be indexed" };
 
-		if (symtype_is_integral(expr.smxp.type) == false)
+		if (symtype_is_integral(expr.semexpr.type) == false)
 			return Error{ expr.loc, "invalid index" };
 
 		Semantic_Expr self = {};
@@ -151,7 +151,7 @@ namespace s22
 
 		for (size_t i = 0; i < params.count; i++)
 		{
-			if (params[i].smxp.type != sym->type.procedure->parameters[i])
+			if (params[i].semexpr.type != sym->type.procedure->parameters[i])
 				return Error{ params[i].loc, "invalid argument" };
 		}
 

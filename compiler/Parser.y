@@ -8,7 +8,7 @@
     #include "compiler/Parser.h"
     using namespace s22;
 }
-%define api.value.type {Parser::YY_Symbol}
+%define api.value.type { YY_Symbol }
 
 %parse-param    { Parser *p }
 
@@ -63,7 +63,7 @@
 %type <unit> decl_var decl_const decl_proc
 
 %printer { symtype_print(yyo, $$); } type
-%printer { fprintf(yyo, "%s", $$.data); } IDENTIFIER
+%printer { fprintf(yyo, "%s", $$); } IDENTIFIER
 
 // OPERATOR PRECEDENCE (LOWEST TO HIGHEST)
 %left L_OR
@@ -247,29 +247,29 @@ type:
     ;
 
 assignment:
-    IDENTIFIER '=' expr         { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::MOV, $expr); }
-    | IDENTIFIER AS_ADD expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::ADD, $expr); }
-    | IDENTIFIER AS_SUB expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::SUB, $expr); }
-    | IDENTIFIER AS_MUL expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::MUL, $expr); }
-    | IDENTIFIER AS_DIV expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::DIV, $expr); }
-    | IDENTIFIER AS_MOD expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::MOD, $expr); }
-    | IDENTIFIER AS_AND expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::AND, $expr); }
-    | IDENTIFIER AS_OR expr     { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::OR,  $expr); }
-    | IDENTIFIER AS_XOR expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::XOR, $expr); }
-    | IDENTIFIER AS_SHL expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::SHL, $expr); }
-    | IDENTIFIER AS_SHR expr    { $$ = p->assign(@2, $IDENTIFIER, Op_Assign::SHR, $expr); }
+    IDENTIFIER '=' expr         { $$ = p->assign(@2, $IDENTIFIER, Asn::MOV, $expr); }
+    | IDENTIFIER AS_ADD expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::ADD, $expr); }
+    | IDENTIFIER AS_SUB expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::SUB, $expr); }
+    | IDENTIFIER AS_MUL expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::MUL, $expr); }
+    | IDENTIFIER AS_DIV expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::DIV, $expr); }
+    | IDENTIFIER AS_MOD expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::MOD, $expr); }
+    | IDENTIFIER AS_AND expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::AND, $expr); }
+    | IDENTIFIER AS_OR expr     { $$ = p->assign(@2, $IDENTIFIER, Asn::OR,  $expr); }
+    | IDENTIFIER AS_XOR expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::XOR, $expr); }
+    | IDENTIFIER AS_SHL expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::SHL, $expr); }
+    | IDENTIFIER AS_SHR expr    { $$ = p->assign(@2, $IDENTIFIER, Asn::SHR, $expr); }
 
-    | array_access '=' expr     { $$ = p->array_assign(@2, $array_access, Op_Assign::MOV, $expr); }
-    | array_access AS_ADD expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::ADD, $expr); }
-    | array_access AS_SUB expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::SUB, $expr); }
-    | array_access AS_MUL expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::MUL, $expr); }
-    | array_access AS_DIV expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::DIV, $expr); }
-    | array_access AS_MOD expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::MOD, $expr); }
-    | array_access AS_AND expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::AND, $expr); }
-    | array_access AS_OR expr   { $$ = p->array_assign(@2, $array_access, Op_Assign::OR,  $expr); }
-    | array_access AS_XOR expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::XOR, $expr); }
-    | array_access AS_SHL expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::SHL, $expr); }
-    | array_access AS_SHR expr  { $$ = p->array_assign(@2, $array_access, Op_Assign::SHR, $expr); }
+    | array_access '=' expr     { $$ = p->array_assign(@2, $array_access, Asn::MOV, $expr); }
+    | array_access AS_ADD expr  { $$ = p->array_assign(@2, $array_access, Asn::ADD, $expr); }
+    | array_access AS_SUB expr  { $$ = p->array_assign(@2, $array_access, Asn::SUB, $expr); }
+    | array_access AS_MUL expr  { $$ = p->array_assign(@2, $array_access, Asn::MUL, $expr); }
+    | array_access AS_DIV expr  { $$ = p->array_assign(@2, $array_access, Asn::DIV, $expr); }
+    | array_access AS_MOD expr  { $$ = p->array_assign(@2, $array_access, Asn::MOD, $expr); }
+    | array_access AS_AND expr  { $$ = p->array_assign(@2, $array_access, Asn::AND, $expr); }
+    | array_access AS_OR expr   { $$ = p->array_assign(@2, $array_access, Asn::OR,  $expr); }
+    | array_access AS_XOR expr  { $$ = p->array_assign(@2, $array_access, Asn::XOR, $expr); }
+    | array_access AS_SHL expr  { $$ = p->array_assign(@2, $array_access, Asn::SHL, $expr); }
+    | array_access AS_SHR expr  { $$ = p->array_assign(@2, $array_access, Asn::SHR, $expr); }
     ;
 
 expr:

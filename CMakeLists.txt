@@ -8,6 +8,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include_directories(${CMAKE_SOURCE_DIR}/compiler/include)
 
+# Visual Studio hot reloading
+if (MSVC AND WIN32 AND NOT MSVC_VERSION VERSION_LESS 142)
+    add_link_options($<$<CONFIG:Debug>:/INCREMENTAL>)
+    add_compile_options($<$<CONFIG:Debug>:/ZI>)
+endif()
+
 # Lexer output file
 set(LEXER ${CMAKE_BINARY_DIR}/Lexer.cpp)
 add_custom_command(

@@ -94,6 +94,7 @@ namespace s22
 
 		Scope *parent_scope;
 		size_t idx_in_parent_table;
+		size_t stack_offset;
 
 		Optional<Symbol_Type> procedure;
 	};

@@ -11,11 +11,13 @@ namespace s22
 		if (context.empty())
 			return context.emplace();
 
-		auto &parent_scope = context.top().scope;
+		auto &parent = context.top();
 		auto &ctx = context.emplace();
 
-		ctx.scope = parent_scope;
+		ctx.scope = parent.scope;
 		scope_push(ctx.scope);
+		
+		ctx.stack_offset = parent.stack_offset;
 
 		return ctx;
 	}
@@ -26,6 +28,15 @@ namespace s22
 		auto ctx = std::move(context.top());
 		context.pop();
 		scope_pop(ctx.scope);
+
+		if (context.empty() == false)
+		{
+			context.top().stack_offset = ctx.stack_offset;
+			
+			// TODO: Add stack offset for functions
+			ctx.stack_offset = 0;
+		}
+
 		return ctx;
 	}
 
@@ -65,11 +76,12 @@ namespace s22
 
 		auto stmts = Buf<AST>::clone(ctx.block_stmts);
 		self.ast = ast_block(stmts);
+		self.ast.as_block->stack_offset = ctx.stack_offset;
 
 		if (this->context.empty())
 		{
 			parser_log(Error{ "Complete!" }, Log_Level::INFO);
-			backend_generate(this->backend, self.ast);
+			backend_compile(this->backend, self.ast);
 			backend_write(this->backend);
 		}
 
@@ -77,14 +89,9 @@ namespace s22
 	}
 
 	void
-	Parser::new_stmt()
-	{
-	}
-
-	void
 	Parser::return_value(Source_Location loc)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 		auto err = scope_return_is_valid(ctx.scope, SYMTYPE_VOID);
 		if (err)
 		{
@@ -92,12 +99,11 @@ namespace s22
 		}
 	}
 
-
 	void
 	Parser::return_value(Source_Location loc, const Parse_Unit &unit)
 	{
-		auto ctx = this->context.top();
-		auto &expr = unit.smxp;
+		auto &ctx = this->context.top();
+		auto &expr = unit.semexpr;
 		auto err = scope_return_is_valid(ctx.scope, expr.type);
 
 		if (err && unit.err == false) // Limit error propagation
@@ -140,7 +146,7 @@ namespace s22
 		Parse_Unit self = { .loc = loc };
 
 		auto [expr, _] = semexpr_literal(nullptr, lit, base);
-		self.smxp = expr;
+		self.semexpr = expr;
 		self.ast = ast_literal(&lit);
 
 		return self;
@@ -156,7 +162,7 @@ namespace s22
 	Parse_Unit
 	Parser::id(Source_Location loc, const Str &id)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = { .loc = loc };
 		self.loc = loc;
@@ -169,7 +175,7 @@ namespace s22
 		}
 		else
 		{
-			self.smxp = expr;
+			self.semexpr = expr;
 		}
 
 		if (auto sym = scope_get_id(ctx.scope, id.data))
@@ -183,7 +189,7 @@ namespace s22
 	Parse_Unit
 	Parser::array(Source_Location loc, const Str &id, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = { .loc = loc };
 		if (auto [expr, err] = semexpr_array_access(ctx.scope, id.data, right); err)
@@ -195,7 +201,7 @@ namespace s22
 		}
 		else
 		{
-			self.smxp = expr;
+			self.semexpr = expr;
 		}
 
 		if (auto sym = scope_get_id(ctx.scope, id.data))
@@ -207,9 +213,9 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::assign(Source_Location loc, const Str &id, Op_Assign op, const Parse_Unit &right)
+	Parser::assign(Source_Location loc, const Str &id, Asn op, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = {};
 		if (auto [expr, err] = semexpr_assign(ctx.scope, id.data, right, op); err)
@@ -227,9 +233,9 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::array_assign(Source_Location loc, const Parse_Unit &left, Op_Assign op, const Parse_Unit &right)
+	Parser::array_assign(Source_Location loc, const Parse_Unit &left, Asn op, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = {};
 		if (auto [expr, err] = semexpr_array_assign(ctx.scope, left, right, op); err)
@@ -249,7 +255,7 @@ namespace s22
 	Parse_Unit
 	Parser::binary(Source_Location loc, const Parse_Unit &left, Bin op, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = { .loc = loc };
 		if (auto [expr, err] = semexpr_binary(ctx.scope, left, right, op); err)
@@ -261,7 +267,7 @@ namespace s22
 		}
 		else
 		{
-			self.smxp = expr;
+			self.semexpr = expr;
 			self.ast = ast_binary((Binary_Op::KIND)op, left.ast, right.ast);
 		}
 
@@ -271,7 +277,7 @@ namespace s22
 	Parse_Unit
 	Parser::unary(Source_Location loc, Uny op, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = { .loc = loc };
 		if (auto [expr, err] = semexpr_unary(ctx.scope, right, op); err)
@@ -283,7 +289,7 @@ namespace s22
 		}
 		else
 		{
-			self.smxp = expr;
+			self.semexpr = expr;
 			self.ast = ast_unary((Unary_Op::KIND)op, right.ast);
 		}
 
@@ -330,7 +336,7 @@ namespace s22
 		}
 		else if (auto sym = scope_get_id(ctx.scope, id.data))
 		{
-			self.smxp = expr;
+			self.semexpr = expr;
 
 			// Build ast arguments
 			auto ast_args = Buf<AST>::make(params.count);
@@ -345,7 +351,7 @@ namespace s22
 	Parse_Unit
 	Parser::decl(Source_Location loc, const Str &id, Symbol_Type type)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
@@ -358,6 +364,7 @@ namespace s22
 
 		if (err == false)
 		{
+			ctx.stack_offset += 1;
 			self.ast = ast_decl(sym, AST{});
 		}
 		return self;
@@ -366,7 +373,7 @@ namespace s22
 	Parse_Unit
 	Parser::decl_expr(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
@@ -379,6 +386,7 @@ namespace s22
 
 		if (err == false)
 		{
+			ctx.stack_offset += 1;
 			self.ast = ast_decl(sym, right.ast);
 		}
 
@@ -388,7 +396,7 @@ namespace s22
 	Parse_Unit
 	Parser::decl_array(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
@@ -402,6 +410,7 @@ namespace s22
 
 		if (err == false)
 		{
+			ctx.stack_offset += symbol.type.array;
 			self.ast = ast_decl(sym, AST{});
 		}
 		return self;
@@ -410,7 +419,7 @@ namespace s22
 	Parse_Unit
 	Parser::decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Parse_Unit self = {};
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
@@ -423,6 +432,7 @@ namespace s22
 
 		if (err == false)
 		{
+			ctx.stack_offset += 1;
 			self.ast = ast_decl(sym, right.ast);
 		}
 
@@ -432,7 +442,7 @@ namespace s22
 	void
 	Parser::decl_proc_begin(Source_Location loc, const Str &id)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
 		Symbol sym = {
 			.id = id,
@@ -450,20 +460,19 @@ namespace s22
 	void
 	Parser::decl_proc_end(const Str &id, Symbol_Type return_type)
 	{
-		auto ctx = this->context.top();
+		auto &ctx = this->context.top();
 
-		auto sym = scope_get_id(ctx.scope->parent_scope, id.data);
-		if (sym == nullptr)
-			parser_log(Error{ "UNREACHABLE" }, Log_Level::CRITICAL);
-
-		sym->type.procedure = scope_make_proc(ctx.scope, return_type);
-		ctx.scope->procedure = return_type;
+		if (auto sym = scope_get_id(ctx.scope->parent_scope, id.data))
+		{
+			sym->type.procedure = scope_make_proc(ctx.scope, return_type);
+			ctx.scope->procedure = return_type;
+		}
 	}
 
 	void
 	Parser::switch_begin(Source_Location loc, const Parse_Unit &expr)
 	{
-		if (symtype_is_integral(expr.smxp.type) == false)
+		if (symtype_is_integral(expr.semexpr.type) == false)
 			return parser_log(Error{ expr.loc, "invalid type" });
 
 		auto &ctx = ctx_push(this->context);
@@ -495,8 +504,7 @@ namespace s22
 	void
 	Parser::switch_case_add(const Parse_Unit &literal)
 	{
-		auto &expr = literal.smxp;
-		auto &opr = literal.opr;
+		auto &expr = literal.semexpr;
 		auto &ctx = this->context.top();
 
 		if (expr.is_literal == false || symtype_is_integral(expr.type) == false)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "compiler/AST.h"
 #include "compiler/Backend.h"
 #include "compiler/Symbol.h"
 
@@ -12,7 +13,7 @@ namespace s22
 		// TODO: UNINITIALIZED VARIABLES
 	};
 
-	enum class Op_Assign
+	enum class Asn
 	{
 		MOV = I_MOV, // A = B
 
@@ -77,10 +78,10 @@ namespace s22
 	semexpr_id(Scope *scope, const char *id);
 
 	Result<Semantic_Expr>
-	semexpr_assign(Scope *scope, const char *id, const Parse_Unit &right, Op_Assign op);
+	semexpr_assign(Scope *scope, const char *id, const Parse_Unit &right, Asn op);
 
 	Result<Semantic_Expr>
-	semexpr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Op_Assign op);
+	semexpr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Asn op);
 
 	Result<Semantic_Expr>
 	semexpr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Bin op);

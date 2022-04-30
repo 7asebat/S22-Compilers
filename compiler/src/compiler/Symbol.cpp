@@ -121,7 +121,7 @@ namespace s22
 		if (expr.err)
 			return expr.err;
 
-		if (symbol.type != expr.smxp.type)
+		if (symbol.type != expr.semexpr.type)
 			return Error{expr.loc, "type mismatch"};
 
 		auto [sym, sym_err] = scope_add_decl(self, symbol);
@@ -189,7 +189,7 @@ namespace s22
 	scope_get_id(Scope *self, const char *id)
 	{
 		size_t scope_idx_in_parent = self->table.size();
-		for (auto scope = self; scope != nullptr;)
+		for (auto scope = self; scope != nullptr; scope = scope->parent_scope)
 		{
 			for (size_t i = 0; i < scope_idx_in_parent; i++)
 			{
@@ -204,7 +204,6 @@ namespace s22
 			}
 
 			scope_idx_in_parent = scope->idx_in_parent_table;
-			scope = scope->parent_scope;
 		}
 		return nullptr;
 	}

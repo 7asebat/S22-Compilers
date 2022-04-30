@@ -1,15 +1,87 @@
 #include "compiler/Backend.h"
 #include "compiler/Symbol.h"
-#include "compiler/Semantic_Expr.h"
 #include "compiler/Parser.h"
 
 #include <unordered_map>
-#include <fstream>
 #include <iostream>
 #include <stack>
 
 namespace s22
 {
+	struct Label
+	{
+		enum TYPE
+		{
+			NONE,
+			LABEL,
+
+			END_IF, END_ELSEIF, END_ALL,
+			END_CASE, END_SWITCH,
+
+			FOR, END_FOR,
+			WHILE, END_WHILE,
+
+			PROC,
+		};
+		TYPE type;
+		uint64_t id;
+	};
+
+	// Temporary register
+	// Memory address
+	// Immediate value
+	// Condition
+	enum OPERAND_LOCATION
+	{
+		// NIL value
+		OP_NIL,
+
+		// General purpose registers
+		RAX, RBX, RCX, RDX,
+
+		// Reserved registers
+		RSP, RBP, RSI, RDI,
+
+		// Immediate value
+		OP_IMM,
+
+		// Memory address
+		OP_MEM,
+
+		// Label
+		OP_LBL,
+
+		// Condition
+		OP_COND
+	};
+
+	struct Memory_Address
+	{
+		OPERAND_LOCATION base;
+		OPERAND_LOCATION index;
+		int offset;
+	};
+
+	struct Operand
+	{
+		OPERAND_LOCATION loc;
+		size_t size;
+
+		inline Operand() = default;
+		inline Operand(OPERAND_LOCATION l) 		{ *this = {}; loc = l; }
+		inline Operand(int v)					{ *this = {}; loc = OP_IMM; value = (uint64_t)v; }
+		inline Operand(uint64_t v)				{ *this = {}; loc = OP_IMM; value = v; }
+		inline Operand(Label lbl)				{ *this = {}; loc = OP_LBL; label = lbl; }
+		inline Operand(Memory_Address adr)		{ *this = {}; loc = OP_MEM; address = adr; }
+
+		union // immediate value/memory offset
+		{
+			uint64_t value;
+			Label label;
+			Memory_Address address;
+		};
+	};
+
 	struct Instruction
 	{
 		INSTRUCTION_OP op;
@@ -28,13 +100,16 @@ namespace s22
 
 	struct IBackend
 	{
-        bool is_used[RDX + 1];
+		bool is_used[RDX + 1];
 
-        std::unordered_map<const Symbol*, Operand> variables;
+		std::unordered_map<const Symbol*, Operand> variables;
 		std::stack<size_t> stack_offset;
 
 		std::vector<Instruction> program;
 	};
+
+	Operand
+	backend_generate(Backend self, AST ast);
 
 	template <typename... TArgs>
 	inline static void
@@ -158,14 +233,14 @@ namespace s22
 	inline static void
 	use_reg(Backend self, Operand reg)
 	{
-        self->is_used[reg.loc] = true;
-    }
+		self->is_used[reg.loc] = true;
+	}
 
 	inline static void
 	clear_reg(Backend self, Operand reg)
 	{
-        self->is_used[reg.loc] = false;
-    }
+		self->is_used[reg.loc] = false;
+	}
 
 	inline static size_t
 	make_label_id()
@@ -304,6 +379,12 @@ namespace s22
 	}
 
 	void
+	backend_compile(Backend self, AST ast)
+	{
+		backend_generate(self, ast);
+	}
+
+	void
 	backend_decl(Backend self, const Symbol *sym)
 	{
 		uint64_t word_count = std::max(1ui64, sym->type.array);
@@ -318,10 +399,10 @@ namespace s22
 	}
 
 	void
-	backend_decl_expr(Backend self, const Symbol *sym, const Parse_Unit &right)
+	backend_decl_expr(Backend self, const Symbol *sym, Operand right)
 	{
 		backend_decl(self, sym);
-		backend_assign(self, I_MOV, sym, right);
+		assign(self, I_MOV, self->variables[sym], right);
 	}
 
 	Operand
@@ -346,8 +427,8 @@ namespace s22
 		auto idx = backend_generate(self, arr->index);
 		if (idx.loc == OP_IMM)
 		{
-            opr.address.offset += idx.value;
-        }
+			opr.address.offset += idx.value;
+		}
 		else if (operand_is_register(idx))
 		{
 			opr.address.index = idx.loc;
@@ -361,23 +442,11 @@ namespace s22
 		return opr;
 	}
 
-	void
-	backend_assign(Backend self, INSTRUCTION_OP op, const Symbol *sym, const Parse_Unit &right)
-	{
-		assign(self, op, self->variables[sym], right.opr);
-	}
-
-	void
-	backend_array_assign(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right)
-	{
-		assign(self, op, left.opr, right.opr);
-	}
-
 	Operand
-	backend_binary(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right)
+	backend_binary(Backend self, INSTRUCTION_OP op, Operand left, Operand right)
 	{
 		// Collect operands
-		auto [opr1, opr2] = prepare_operands(self, left.opr, right.opr);
+		auto [opr1, opr2] = prepare_operands(self, left, right);
 
 		auto dst = first_available_register(self);
 		use_reg(self, dst);
@@ -404,24 +473,24 @@ namespace s22
 		}
 
 		if (operand_is_register(opr1))
-            clear_reg(self, opr1);
+			clear_reg(self, opr1);
 
-        return dst;
+		return dst;
 	}
 
 	Operand
-	backend_unary(Backend self, INSTRUCTION_OP op, const Parse_Unit &right)
+	backend_unary(Backend self, INSTRUCTION_OP op, Operand right)
 	{
 		auto dst = first_available_register(self);
-        use_reg(self, dst);
+		use_reg(self, dst);
 
-        if (op_is_logical(op) == false)
+		if (op_is_logical(op) == false)
 		{
-			instruction(self, op, dst, right.opr);
+			instruction(self, op, dst, right);
 		}
 		else
 		{
-			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = right.opr };
+			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = right };
 			logical_not(self, ins);
 		}
 
@@ -536,17 +605,17 @@ namespace s22
 
 		case AST::PROC_CALL: 		return {}; // TODO: IMPLEMENT
 		case AST::ARRAY_ACCESS: 	return backend_array_access(self, ast.as_arr_access);
-        case AST::BINARY: {
+		case AST::BINARY: {
 			auto bin = ast.as_binary;
 			auto left = backend_generate(self, bin->left);
 			auto right = backend_generate(self, bin->right);
-			return backend_binary(self, (INSTRUCTION_OP)bin->kind, Parse_Unit{.opr = left}, Parse_Unit{.opr = right});
+			return backend_binary(self, (INSTRUCTION_OP)bin->kind, left, right);
 		}
 
 		case AST::UNARY: {
 			auto uny = ast.as_unary;
 			auto right = backend_generate(self, uny->right);
-			return backend_unary(self, (INSTRUCTION_OP)uny->kind, Parse_Unit{.opr = right});
+			return backend_unary(self, (INSTRUCTION_OP)uny->kind, right);
 		}
 
 		case AST::ASSIGN: {
@@ -567,7 +636,7 @@ namespace s22
 			else
 			{
 				auto expr = backend_generate(self, decl->expr);
-				backend_decl_expr(self, decl->sym, Parse_Unit{.opr = expr});
+				backend_decl_expr(self, decl->sym, expr);
 			}
 
 			return {};
@@ -689,8 +758,21 @@ namespace s22
 		}
 
 		case AST::BLOCK: {
-			for (auto stmt: ast.as_block->stmts)
-				backend_generate(self, stmt);
+			auto blk = ast.as_block;
+			if (blk->stack_offset != 0)
+			{
+				instruction(self, I_SUB, RSP, blk->stack_offset);
+
+				for (auto stmt: blk->stmts)
+					backend_generate(self, stmt);
+
+				instruction(self, I_ADD, RSP, blk->stack_offset);
+			}
+			else
+			{
+				for (auto stmt : blk->stmts)
+					backend_generate(self, stmt);
+			}
 
 			return {};
 		}
@@ -721,9 +803,9 @@ struct std::formatter<s22::OPERAND_LOCATION> : std::formatter<std::string>
 		case RSI: return format_to(ctx.out(), "RSI");
 		case RDI: return format_to(ctx.out(), "RDI");
 
-        default: return ctx.out();
-        };
-    }
+		default: return ctx.out();
+		};
+	}
 };
 
 template <>
@@ -753,8 +835,8 @@ struct std::formatter<s22::Operand> : std::formatter<std::string>
 		case OP_LBL: return format_to(ctx.out(), "{}", opr.label);
 
 		default: return format_to(ctx.out(), "{}", opr.loc);
-        }
-    }
+		}
+	}
 };
 
 template <>

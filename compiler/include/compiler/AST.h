@@ -216,6 +216,7 @@ namespace s22
 	struct Block
 	{
 		Buf<AST> stmts;
+		size_t stack_offset;
 	};
 
 	AST

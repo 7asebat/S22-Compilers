@@ -1,7 +1,7 @@
 # Quadruples
 
 > ### _Notes_
-> - `V` is either a GP register (`Rx`), an immediate value (`42`), or a memory location (`base+index+offset`)
+> - `V` is either a GP register (`Rx`), an immediate value (`42`), or a memory location (`[base+index+offset]`)
 > - `L` is a label
 > - `x` is a variable label
 

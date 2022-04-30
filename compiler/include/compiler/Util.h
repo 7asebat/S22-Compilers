@@ -10,22 +10,11 @@ namespace s22
 	struct Memory_Log
 	{
 		std::unordered_set<void *> log;
-
 		inline ~Memory_Log()
 		{
 			for (auto ptr : log)
-			{
-				// fprintf(stderr, "[Memory_Log] %p freed\n", ptr);
 				free(ptr);
-			}
 		};
-
-		inline void
-		operator<<(void *ptr)
-		{
-			log.insert(ptr);
-			// fprintf(stderr, "[Memory_Log] %p allocated %zuB\n", ptr, _msize(ptr));
-		}
 	};
 
 	template <typename T>
@@ -34,15 +23,13 @@ namespace s22
 	{
 		static Memory_Log log = {};
 
-		auto ptr = calloc(count, sizeof(T));
-		log << ptr;
+		auto ptr = (T*)calloc(count, sizeof(T));
+		log.log.insert(ptr);
 
 		if (count == 1)
-		{
-			*(T*)ptr = T{};
-		}
+			*ptr = T{};
 
-		return (T*)ptr;
+		return ptr;
 	}
 
 	template <typename T>
@@ -148,9 +135,6 @@ namespace s22
 			}
 			return true;
 		}
-
-		inline Buf<T>&
-		operator=(const T* other) { return *this; }
 	};
 
 	struct Str
@@ -160,8 +144,16 @@ namespace s22
 		char data[CAP + 1];
 		size_t count;
 
-		inline char &
-		operator[](size_t i) { return data[i]; }
+		inline Str() = default;
+		inline Str(const char *str)
+		{
+			*this = {};
+			if (str != nullptr)
+			{
+				strcpy_s(this->data, str);
+				this->count = strlen(str);
+			}
+		}
 
 		inline bool
 		operator==(const char *other) const { return strcmp(data, other) == 0; }
@@ -174,15 +166,6 @@ namespace s22
 
 		inline bool
 		operator!=(const Str &other) const { return !operator==(other); }
-
-		inline Str&
-		operator=(const char *other) { strcpy_s(data, other); count = strlen(data); return *this;  }
-
-		inline const char*
-		begin() { return data; }
-
-		inline const char*
-		end() { return data + count; }
 	};
 
 	struct Error
@@ -377,4 +360,3 @@ struct std::formatter<s22::Optional<T>> : std::formatter<std::string>
 		}
 	}
 };
-

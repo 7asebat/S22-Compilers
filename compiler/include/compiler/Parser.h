@@ -1,9 +1,9 @@
 #pragma once
 
-#include "compiler/Symbol.h"
-#include "compiler/Semantic_Expr.h"
-#include "compiler/Backend.h"
 #include "compiler/AST.h"
+#include "compiler/Backend.h"
+#include "compiler/Semantic_Expr.h"
+#include "compiler/Symbol.h"
 
 #include <stack>
 #include <unordered_set>
@@ -12,23 +12,22 @@ namespace s22
 {
 	struct Parse_Unit
 	{
-		Semantic_Expr smxp;
-		Operand opr;
+		Semantic_Expr semexpr;
 		AST ast;
 		Source_Location loc;
 		Error err;
 	};
 
+	union YY_Symbol
+	{
+		Str id;
+		Literal value;
+		Symbol_Type type;
+		Parse_Unit unit;
+	};
+
 	struct Parser
 	{
-		union YY_Symbol
-		{
-			Str id;
-			Literal value;
-			Symbol_Type type;
-			Parse_Unit unit;
-		};
-
 		void
 		init();
 
@@ -40,9 +39,6 @@ namespace s22
 
 		Parse_Unit
 		block_end();
-
-		void
-		new_stmt();
 
 		void
 		return_value(Source_Location loc);
@@ -60,10 +56,10 @@ namespace s22
 		array(Source_Location loc, const Str &id, const Parse_Unit &right);
 
 		Parse_Unit
-		assign(Source_Location loc, const Str &id, Op_Assign op, const Parse_Unit &right);
+		assign(Source_Location loc, const Str &id, Asn op, const Parse_Unit &right);
 
 		Parse_Unit
-		array_assign(Source_Location loc, const Parse_Unit &left, Op_Assign op, const Parse_Unit &right);
+		array_assign(Source_Location loc, const Parse_Unit &left, Asn op, const Parse_Unit &right);
 
 		Parse_Unit
 		binary(Source_Location loc, const Parse_Unit &left, Bin op, const Parse_Unit &right);
@@ -137,25 +133,26 @@ namespace s22
 		Parse_Unit
 		for_loop(Source_Location loc, const Parse_Unit &init, const Parse_Unit &cond, const Parse_Unit &post);
 
-		struct Sw_Case
-		{
-			std::vector<Literal*> group;
-			Switch_Case *ast_sw_case;
-		};
+		Scope global;
 
 		struct Context
 		{
 			Scope *scope;
 			std::vector<Parse_Unit> proc_call_arguments;
 			std::vector<AST> block_stmts;
+			size_t stack_offset;
 
+			struct Sw_Case
+			{
+				std::vector<Literal *> group;
+				Switch_Case *ast_sw_case;
+			};
 			AST switch_expr;
 			std::vector<Sw_Case> switch_cases;
 			Block *switch_default;
 		};
-
-		Scope global;
 		std::stack<Context> context;
+
 		Backend backend;
 	};
 
@@ -176,4 +173,3 @@ namespace s22
 
 void
 yyerror(const s22::Source_Location *location, s22::Parser *p, const char *message);
-

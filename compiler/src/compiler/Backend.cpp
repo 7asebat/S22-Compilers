@@ -10,11 +10,6 @@
 
 namespace s22
 {
-	constexpr static Operand OPR_SP   = { .loc = Operand::SP };
-	constexpr static Operand OPR_BP   = { .loc = Operand::BP };
-	constexpr static Operand OPR_ZERO = { .loc = Operand::IMM, .value = 0 };
-	constexpr static Operand OPR_ONE  = { .loc = Operand::IMM, .value = 1 };
-
 	struct Instruction
 	{
 		INSTRUCTION_OP op;
@@ -31,18 +26,11 @@ namespace s22
 		uint64_t return_address;
 	};
 
-	struct Register
-	{
-		Operand::LOCATION id;
-		bool is_used;
-	};
-
 	struct IBackend
 	{
-		Register reg[Operand::R4 + 1];
+        bool is_used[RDX + 1];
 
-		std::unordered_map<const Symbol*, Operand> variables;
-		std::unordered_map<std::string, uint64_t> labels;
+        std::unordered_map<const Symbol*, Operand> variables;
 		std::stack<size_t> stack_offset;
 
 		std::vector<Instruction> program;
@@ -52,7 +40,7 @@ namespace s22
 	inline static void
 	instruction(Backend self, INSTRUCTION_OP op, TArgs &&...args)
 	{
-		Instruction ins = { op, std::forward<TArgs>(args)... };
+		Instruction ins = { op, Operand{std::forward<TArgs>(args)}... };
 		ins.operand_count = sizeof...(args);
 		self->program.push_back(ins);
 	}
@@ -61,7 +49,7 @@ namespace s22
 	inline static void
 	instruction(Backend self, Label label, INSTRUCTION_OP op, TArgs &&...args)
 	{
-		Instruction ins = { op, std::forward<TArgs>(args)... };
+		Instruction ins = { op, {std::forward<TArgs>(args)}... };
 		ins.operand_count = sizeof...(args);
 		ins.label = label;
 		self->program.push_back(ins);
@@ -120,37 +108,64 @@ namespace s22
 	{
 		switch (opr.loc)
 		{
-		case Operand::R0:
-		case Operand::R1:
-		case Operand::R2:
-		case Operand::R3:
-		case Operand::R4:
+		case RAX: case RBX: case RCX: case RDX: case RSP: case RBP:
 			return true;
-
 		default:
 			return false;
 		}
 	}
 
+	inline static bool
+	is_mem_to_mem(Operand src, Operand dst)
+	{
+		return src.loc == OP_MEM && dst.loc == OP_MEM;
+	}
+
 	inline static Operand
 	first_available_register(Backend self)
 	{
-		for (auto &reg: self->reg)
+		for (auto reg: { RAX, RBX, RCX, RDX })
 		{
-			if (reg.is_used == false)
-				return { .loc = reg.id };
+			if (self->is_used[reg] == false)
+				return Operand{reg};
 		}
 
 		// TODO: Handle no available registers, overwrite for now
-		return { .loc = Operand::R0 };
+		return Operand{RAX};
+	}
+
+	inline static std::pair<Operand, Operand>
+	prepare_operands(Backend self, Operand op1, Operand op2)
+	{
+		if (is_mem_to_mem(op1, op2) == false)
+			return { op1, op2 };
+		
+		auto reg = first_available_register(self);
+		instruction(self, I_MOV, reg, op2);
+
+		return { op1, reg };
 	}
 
 	inline static void
 	clear_registers(Backend self)
 	{
-		for (auto &reg: self->reg)
-			reg.is_used = false;
+		self->is_used[RAX] = false;
+		self->is_used[RBX] = false;
+		self->is_used[RCX] = false;
+		self->is_used[RDX] = false;
 	}
+
+	inline static void
+	use_reg(Backend self, Operand reg)
+	{
+        self->is_used[reg.loc] = true;
+    }
+
+	inline static void
+	clear_reg(Backend self, Operand reg)
+	{
+        self->is_used[reg.loc] = false;
+    }
 
 	inline static size_t
 	make_label_id()
@@ -162,30 +177,26 @@ namespace s22
 	inline static void
 	logical_and(Backend self, Instruction ins)
 	{
-		Operand br = { .loc = Operand::LBL };
-
 		auto label_id = make_label_id();
 		Label end_if  = { .type = Label::END_IF,  .id = label_id };
 		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// bz $end_if, op1
 		// bz $end_if, op2
-		br.label = end_if;
-		instruction(self, I_BZ, br, ins.src1);
-		instruction(self, I_BZ, br, ins.src2);
+		instruction(self, I_BZ, end_if, ins.src1);
+		instruction(self, I_BZ, end_if, ins.src2);
 
 		// mov dst, 1
-		instruction(self, I_MOV, ins.dst, OPR_ONE);
+		instruction(self, I_MOV, ins.dst, 1);
 
 		// br $end
-		br.label = end_all;
-		instruction(self, I_BR, br);
+		instruction(self, I_BR, end_all);
 
 		// $end_if: mov dst, 0
-		instruction(self, end_if, I_MOV, ins.dst, OPR_ZERO);
+		instruction(self, end_if, I_MOV, ins.dst, 0);
 
-		// $end_all
-		instruction(self, end_all, I_NOP);
+		// $end_all:
+		instruction(self, end_all);
 	}
 
 	inline static void
@@ -193,7 +204,6 @@ namespace s22
 	{
 		// a = b || c
 		// a = !(!b && !c)
-		Operand br = { .loc = Operand::LBL };
 
 		auto label_id = make_label_id();
 		Label end_if  = { .type = Label::END_IF,  .id = label_id };
@@ -201,102 +211,73 @@ namespace s22
 
 		// bnz $end_if, op1
 		// bnz $end_if, op2
-		br.label = end_if;
-		instruction(self, I_BNZ, br, ins.src1);
-		instruction(self, I_BNZ, br, ins.src2);
+		instruction(self, I_BNZ, end_if, ins.src1);
+		instruction(self, I_BNZ, end_if, ins.src2);
 
 		// mov dst, 0
-		instruction(self, I_MOV, ins.dst, OPR_ZERO);
+		instruction(self, I_MOV, ins.dst, 0);
 
 		// br $end
-		br.label = end_all;
-		instruction(self, I_BR, br);
+		instruction(self, I_BR, end_all);
 
 		// $end_if: mov dst, 1
-		instruction(self, end_if, I_MOV, ins.dst, OPR_ONE);
+		instruction(self, end_if, I_MOV, ins.dst, 1);
 
-		// $end_all
-		instruction(self, end_all, I_NOP);
+		// $end_all:
+		instruction(self, end_all);
 	}
 
 	inline static void
 	logical_not(Backend self, Instruction ins)
 	{
-		Operand br = { .loc = Operand::LBL };
-
 		auto label_id = make_label_id();
 		Label end_if  = { .type = Label::END_IF,  .id = label_id };
 		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// bz $end_if, op
-		br.label = end_if;
-		instruction(self, I_BZ, br, ins.src1);
+		instruction(self, I_BZ, end_if, ins.src1);
 
 		// mov dst, 1
-		instruction(self, I_MOV, ins.dst, OPR_ONE);
+		instruction(self, I_MOV, ins.dst, 1);
 
 		// br $end
-		br.label = end_all;
-		instruction(self, I_BR, br);
+		instruction(self, I_BR, end_all);
 
 		// $end_if: mov dst, 0
-		instruction(self, end_if, I_MOV, ins.dst, OPR_ZERO);
+		instruction(self, end_if, I_MOV, ins.dst, 0);
 
-		// $end_all
-		instruction(self, end_all, I_NOP);
+		// $end_all:
+		instruction(self, end_all);
 	}
 
 	inline static void
 	compare(Backend self, Instruction ins)
 	{
-		Operand br = { .loc = Operand::LBL };
-
 		auto label_id = make_label_id();
 		Label end_if  = { .type = Label::END_IF,  .id = label_id };
 		Label end_all = { .type = Label::END_ALL, .id = label_id };
 
 		// b_inv $end_if, op1, op2
-		br.label = end_if;
-		instruction(self, invert_op(ins.op), br, ins.src1, ins.src2);
+		instruction(self, invert_op(ins.op), end_if, ins.src1, ins.src2);
 
 		// mov dst, 1
-		instruction(self, I_MOV, ins.dst, OPR_ONE);
+		instruction(self, I_MOV, ins.dst, 1);
 
 		// br $end
-		br.label = end_all;
-		instruction(self, I_BR, br);
+		instruction(self, I_BR, end_all);
 
 		// $end_if: mov dst, 0
-		instruction(self, end_if, I_MOV, ins.dst, OPR_ZERO);
+		instruction(self, end_if, I_MOV, ins.dst, 0);
 
-		// $end_all
-		instruction(self, end_all, I_NOP);
+		// $end_all:
+		instruction(self, end_all);
 	}
 
 	inline static void
 	assign(Backend self, INSTRUCTION_OP op, Operand left, Operand right)
 	{
-		auto src = right;
-		if (op == I_MOV)
-		{
-			if (operand_is_register(right) == false)
-			{
-				// Value needs to be passed
-				src = first_available_register(self);
-				instruction(self, I_MOV, src, right);
-			}
-		}
-		else
-		{
-			// Move into register
-			src = first_available_register(self);
-			instruction(self, I_LD, src, left);
-			instruction(self, op, src, src, right);
-		}
-
-		// Write result
-		instruction(self, I_ST, left, src);
-
+		auto [dst, src] = prepare_operands(self, left, right);
+		instruction(self, op, dst, src);
 		clear_registers(self);
 	}
 
@@ -312,12 +293,6 @@ namespace s22
 	{
 		// Begin a new offset/code path
 		self->stack_offset.push(0);
-
-		self->reg[Operand::R0] = { .id = Operand::R0 };
-		self->reg[Operand::R1] = { .id = Operand::R1 };
-		self->reg[Operand::R2] = { .id = Operand::R2 };
-		self->reg[Operand::R3] = { .id = Operand::R3 };
-		self->reg[Operand::R4] = { .id = Operand::R4 };
 	}
 
 
@@ -335,10 +310,11 @@ namespace s22
 
 		// SP - word_count
 		self->stack_offset.top() += word_count;
-		self->variables[sym] = { .loc = Operand::MEM, .offset = self->stack_offset.top() };
 
-		Operand stack_offset = { .loc = Operand::MEM, .offset = word_count };
-		instruction(self, I_SUB, OPR_SP, stack_offset);
+		Memory_Address adr = { .base = RBP, .offset = -(int)self->stack_offset.top() };
+		self->variables[sym] = { adr };
+
+		// TODO: One shot stack pointer subtraction
 	}
 
 	void
@@ -351,7 +327,9 @@ namespace s22
 	Operand
 	backend_lit(Backend self, Literal *lit)
 	{
-		return { .loc = Operand::IMM, .size = 1, .value = lit->value };
+		Operand opr = { lit->value };
+		opr.size = 1;
+		return opr;
 	}
 
 	Operand
@@ -361,10 +339,25 @@ namespace s22
 	}
 
 	Operand
-	backend_array_access(Backend self, const Symbol *sym, const Parse_Unit &right)
+	backend_array_access(Backend self, const Array_Access *arr)
 	{
-		auto opr = self->variables[sym];
-		opr.offset -= right.opr.value;
+		auto opr = backend_sym(self, arr->sym);
+
+		auto idx = backend_generate(self, arr->index);
+		if (idx.loc == OP_IMM)
+		{
+            opr.address.offset += idx.value;
+        }
+		else if (operand_is_register(idx))
+		{
+			opr.address.index = idx.loc;
+		}
+		else
+		{
+			instruction(self, I_MOV, RSI, idx);
+			opr.address.index = RSI;
+		}
+
 		return opr;
 	}
 
@@ -384,27 +377,10 @@ namespace s22
 	backend_binary(Backend self, INSTRUCTION_OP op, const Parse_Unit &left, const Parse_Unit &right)
 	{
 		// Collect operands
-		auto opr1 = left.opr;
-		if (opr1.loc == Operand::MEM)
-		{
-			auto reg = first_available_register(self);
-			instruction(self, I_LD, reg, left.opr);
-			opr1 = reg;
-
-			// Don't use for other op
-			self->reg[opr1.loc].is_used = true;
-		}
-
-		auto opr2 = right.opr;
-		if (opr2.loc == Operand::MEM)
-		{
-			auto reg = first_available_register(self);
-			instruction(self, I_LD, reg, right.opr);
-			opr2 = reg;
-		}
+		auto [opr1, opr2] = prepare_operands(self, left.opr, right.opr);
 
 		auto dst = first_available_register(self);
-		self->reg[dst.loc].is_used = true;
+		use_reg(self, dst);
 
 		if (op_is_logical(op) == false)
 		{
@@ -428,32 +404,24 @@ namespace s22
 		}
 
 		if (operand_is_register(opr1))
-			self->reg[opr1.loc].is_used = false;
+            clear_reg(self, opr1);
 
-		return dst;
+        return dst;
 	}
 
 	Operand
 	backend_unary(Backend self, INSTRUCTION_OP op, const Parse_Unit &right)
 	{
-		auto opr = right.opr;
-		if (opr.loc == Operand::MEM)
-		{
-			auto reg = first_available_register(self);
-			instruction(self, I_LD, reg, right.opr);
-			opr = reg;
-		}
-
 		auto dst = first_available_register(self);
-		self->reg[dst.loc].is_used = true;
+        use_reg(self, dst);
 
-		if (op_is_logical(op) == false)
+        if (op_is_logical(op) == false)
 		{
-			instruction(self, op, dst, opr);
+			instruction(self, op, dst, right.opr);
 		}
 		else
 		{
-			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = opr };
+			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = right.opr };
 			logical_not(self, ins);
 		}
 
@@ -463,8 +431,6 @@ namespace s22
 	Label
 	backend_gen_condition(Backend self, AST ast, Label end_block)
 	{
-		Operand br_end = { .loc = Operand::LBL, .label = end_block };
-
 		switch (ast.kind)
 		{
 		case AST::NIL: // ELSE branch
@@ -472,14 +438,7 @@ namespace s22
 
 		case AST::LITERAL: case AST::SYMBOL: case AST::PROC_CALL: case AST::ARRAY_ACCESS: {
 			auto opr = backend_generate(self, ast);
-			if (opr.loc == Operand::MEM)
-			{
-				auto reg = first_available_register(self);
-				instruction(self, I_LD, reg, opr);
-				opr = reg;
-			}
-
-			instruction(self, I_BZ, br_end, opr);
+			instruction(self, I_BZ, end_block, opr);
 			break;
 		}
 
@@ -491,75 +450,35 @@ namespace s22
 			if (op_is_logical(op) == false)
 			{
 				auto opr = backend_generate(self, ast);
-				instruction(self, I_BZ, br_end, opr);
+				instruction(self, I_BZ, end_block, opr);
 			}
 			else if (op == I_LOG_AND)
 			{
 				auto left = backend_generate(self, bin->left);
-				if (left.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, left);
-					left = reg;
-				}
-				instruction(self, I_BZ, br_end, left);
+				instruction(self, I_BZ, end_block, left);
 
 				auto right = backend_generate(self, bin->right);
-				if (right.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, right);
-					right = reg;
-				}
-				instruction(self, I_BZ, br_end, right);
+				instruction(self, I_BZ, end_block, right);
 			}
 			else if (op == I_LOG_OR)
 			{
 				Label lbl_true = { .type = Label::LABEL, .id = make_label_id() };
-				Operand br_true = { .loc = Operand::LBL, .label = lbl_true };
 
 				auto left = backend_generate(self, bin->left);
-				if (left.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, left);
-					left = reg;
-				}
-				instruction(self, I_BNZ, br_true, left);
+				instruction(self, I_BNZ, lbl_true, left);
 
 				auto right = backend_generate(self, bin->right);
-				if (right.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, right);
-					right = reg;
-				}
-				instruction(self, I_BNZ, br_true, right);
+				instruction(self, I_BNZ, lbl_true, right);
 
-				instruction(self, I_BR, br_end);
+				instruction(self, I_BR, end_block);
 				instruction(self, lbl_true);
 			}
 			else
 			{
 				auto left = backend_generate(self, bin->left);
-				if (left.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, left);
-					left = reg;
-
-					self->reg[left.loc].is_used = true;
-				}
-
 				auto right = backend_generate(self, bin->right);
-				if (right.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, right);
-					right = reg;
-				}
 
-				instruction(self, invert_op(op), br_end, left, right);
+				instruction(self, invert_op(op), end_block, left, right);
 			}
 			break;
 		}
@@ -572,48 +491,30 @@ namespace s22
 			if (op_is_logical(op) == false)
 			{
 				auto opr = backend_generate(self, ast);
-				if (opr.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, opr);
-					opr = reg;
-				}
-				instruction(self, I_BZ, br_end, opr);
+				instruction(self, I_BZ, end_block, opr);
 			}
 			else // NOT
 			{
 				auto opr = backend_generate(self, uny->right);
-				if (opr.loc == Operand::MEM)
-				{
-					auto reg = first_available_register(self);
-					instruction(self, I_LD, reg, opr);
-					opr = reg;
-				}
-				instruction(self, I_BNZ, br_end, opr);
+				instruction(self, I_BNZ, end_block, opr);
 			}
 			break;
 		}
 
 		case AST::SWITCH_CASE: {
-			Label lbl_true = { .type = Label::LABEL, .id = make_label_id() };
-			Operand br_true = { .loc = Operand::LBL, .label = lbl_true };
-
 			auto swc = ast.as_case;
+
 			// Fetch the expression
 			auto expr = backend_generate(self, swc->expr);
-			if (expr.loc == Operand::MEM)
-			{
-				auto reg = first_available_register(self);
-				instruction(self, I_LD, reg, expr);
-				expr = reg;
-			}
+
 			// Go to true if any value matches
+			Label lbl_true = { .type = Label::LABEL, .id = make_label_id() };
 			for (auto lit: swc->group)
 			{
-				instruction(self, I_LOG_EQ, br_true, expr, backend_lit(self, lit));
+				instruction(self, I_LOG_EQ, lbl_true, expr, backend_lit(self, lit));
 			}
 
-			instruction(self, I_BR, br_end);
+			instruction(self, I_BR, end_block);
 			instruction(self, lbl_true);
 			break;
 		}
@@ -633,17 +534,9 @@ namespace s22
 		case AST::LITERAL:	return backend_lit(self, ast.as_lit);
 		case AST::SYMBOL:	return backend_sym(self, ast.as_sym);
 
-		case AST::PROC_CALL: return {}; // TODO: IMPLEMENT
-
-		case AST::ARRAY_ACCESS: {
-			auto arr = ast.as_arr_access;
-			auto opr = backend_sym(self, arr->sym);
-			auto offset = backend_generate(self, arr->index);
-			opr.offset -= offset.value;
-			return opr;
-		}
-
-		case AST::BINARY: {
+		case AST::PROC_CALL: 		return {}; // TODO: IMPLEMENT
+		case AST::ARRAY_ACCESS: 	return backend_array_access(self, ast.as_arr_access);
+        case AST::BINARY: {
 			auto bin = ast.as_binary;
 			auto left = backend_generate(self, bin->left);
 			auto right = backend_generate(self, bin->right);
@@ -694,8 +587,7 @@ namespace s22
 				for (auto stmt: ifc->block->stmts)
 					backend_generate(self, stmt);
 
-				Operand to_end_all = { .loc = Operand::LBL, .label = end_all };
-				instruction(self, I_BR, to_end_all);
+				instruction(self, I_BR, end_all);
 				instruction(self, end_if);
 			}
 
@@ -719,8 +611,7 @@ namespace s22
 				for (auto stmt: swc->block->stmts)
 					backend_generate(self, stmt);
 
-				Operand to_end_switch = { .loc = Operand::LBL, .label = end_switch };
-				instruction(self, I_BR, to_end_switch);
+				instruction(self, I_BR, end_switch);
 				instruction(self, end_case);
 			}
 			if (sw->case_default)
@@ -747,8 +638,7 @@ namespace s22
 			for (auto stmt: wh->block->stmts)
 				backend_generate(self, stmt);
 
-			Operand to_begin_while = { .loc = Operand::LBL, .label = begin_while };
-			instruction(self, I_BR, to_begin_while);
+			instruction(self, I_BR, begin_while);
 
 			instruction(self, end_while);
 			return {};
@@ -767,8 +657,7 @@ namespace s22
 			backend_gen_condition(self, do_wh->cond, end_do_while);
 			clear_registers(self);
 
-			Operand to_begin_do_while = { .loc = Operand::LBL, .label = begin_do_while };
-			instruction(self, I_BR, to_begin_do_while);
+			instruction(self, I_BR, begin_do_while);
 
 			instruction(self, end_do_while);
 			return {};
@@ -793,8 +682,7 @@ namespace s22
 			// post
 			backend_generate(self, loop->post);
 
-			Operand to_begin_for = { .loc = Operand::LBL, .label = begin_for };
-			instruction(self, I_BR, to_begin_for);
+			instruction(self, I_BR, begin_for);
 
 			instruction(self, end_for);
 			return {};
@@ -815,6 +703,30 @@ namespace s22
 }
 
 template <>
+struct std::formatter<s22::OPERAND_LOCATION> : std::formatter<std::string>
+{
+	auto
+	format(s22::OPERAND_LOCATION loc, format_context &ctx)
+	{
+		using namespace s22;
+
+		switch (loc)
+		{
+		case RAX: return format_to(ctx.out(), "RAX");
+		case RBX: return format_to(ctx.out(), "RBX");
+		case RCX: return format_to(ctx.out(), "RCX");
+		case RDX: return format_to(ctx.out(), "RDX");
+		case RSP: return format_to(ctx.out(), "RSP");
+		case RBP: return format_to(ctx.out(), "RBP");
+		case RSI: return format_to(ctx.out(), "RSI");
+		case RDI: return format_to(ctx.out(), "RDI");
+
+        default: return ctx.out();
+        };
+    }
+};
+
+template <>
 struct std::formatter<s22::Operand> : std::formatter<std::string>
 {
 	auto
@@ -823,21 +735,26 @@ struct std::formatter<s22::Operand> : std::formatter<std::string>
 		using namespace s22;
 		switch (opr.loc)
 		{
-		case Operand::R0: return format_to(ctx.out(), "R0");
-		case Operand::R1: return format_to(ctx.out(), "R1");
-		case Operand::R2: return format_to(ctx.out(), "R2");
-		case Operand::R3: return format_to(ctx.out(), "R3");
-		case Operand::R4: return format_to(ctx.out(), "R4");
-		case Operand::SP: return format_to(ctx.out(), "SP");
-		case Operand::BP: return format_to(ctx.out(), "BP");
+		case OP_IMM: return format_to(ctx.out(), "{}", opr.value);
 
-		case Operand::IMM: return format_to(ctx.out(), "#{}", opr.value);
-		case Operand::MEM: return format_to(ctx.out(), "-{}(BP)", opr.offset);
-		case Operand::LBL: return format_to(ctx.out(), "{}", opr.label);
-
-		default: return ctx.out();
+		case OP_MEM: {
+			format_to(ctx.out(), "[{}", opr.address.base);
+			if (opr.address.index != OP_NIL)
+			{
+				format_to(ctx.out(), "+{}", opr.address.index);
+			}
+			if (opr.address.offset != 0)
+			{
+				format_to(ctx.out(), "{:+}", opr.address.offset);
+			}
+			return format_to(ctx.out(), "]");
 		}
-	}
+
+		case OP_LBL: return format_to(ctx.out(), "{}", opr.label);
+
+		default: return format_to(ctx.out(), "{}", opr.loc);
+        }
+    }
 };
 
 template <>
@@ -847,13 +764,10 @@ struct std::formatter<s22::Label> : std::formatter<std::string>
 	format(s22::Label label, format_context &ctx)
 	{
 		using namespace s22;
-		if (label.type == Label::NONE)
-			return ctx.out();
 
 		const char *lbl = nullptr;
 		switch (label.type)
 		{
-		case Label::NONE: 		return ctx.out();
 		case Label::LABEL: 		lbl = "LABEL"; 		break;
 
 		case Label::END_IF: 	lbl = "END_IF";		break;
@@ -869,9 +783,11 @@ struct std::formatter<s22::Label> : std::formatter<std::string>
 		case Label::END_WHILE: 	lbl = "END_WHILE";	break;
 
 		case Label::PROC: 		lbl = "PROC";		break;
+
+		default: return ctx.out();
 		}
 
-		return format_to(ctx.out(), "{}#{}", lbl, label.id);
+		return format_to(ctx.out(), "{}${}", lbl, label.id);
 	}
 };
 
@@ -887,10 +803,7 @@ struct std::formatter<s22::Instruction> : std::formatter<std::string>
 		using namespace s22;
 		switch (ins.op)
 		{
-		case I_NOP: 	return format_to(ctx.out(), "NOP");
-
-		case I_LD: 		format_to(ctx.out(), "LD"); 	break;
-		case I_ST: 		format_to(ctx.out(), "ST"); 	break;
+		case I_NOP: 	return ctx.out();
 		case I_MOV:		format_to(ctx.out(), "MOV"); 	break;
 
 		// Arithmetic

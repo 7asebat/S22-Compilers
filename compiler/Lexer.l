@@ -24,8 +24,8 @@ id_postfix {id_prefix}|[0-9]
 identifier {id_prefix}{id_postfix}*
 
 /* Constants */
-lit_int   [-+]?[0-9]+
-lit_float {lit_int}\.[0-9]+
+lit_int   [0-9]+
+lit_float {lit_int}\.{lit_int}
 
 /* Operators */
 operator [<>+\-*/&|=^!~]

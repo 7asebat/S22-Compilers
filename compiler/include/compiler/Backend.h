@@ -15,7 +15,7 @@ namespace s22
 		// Used for labels
 		I_NOP,
 
-		I_LD, I_ST, I_MOV,
+		I_MOV,
 		I_TEST, I_BR, I_BZ, I_BNZ,
 
 		// Binary
@@ -55,36 +55,54 @@ namespace s22
 	// Memory address
 	// Immediate value
 	// Condition
+	enum OPERAND_LOCATION
+	{
+		// NIL value
+		OP_NIL,
+
+		// General purpose registers
+		RAX, RBX, RCX, RDX,
+
+		// Reserved registers
+		RSP, RBP, RSI, RDI,
+
+		// Immediate value
+		OP_IMM,
+
+		// Memory address
+		OP_MEM,
+
+		// Label
+		OP_LBL,
+
+		// Condition
+		OP_COND
+	};
+
+	struct Memory_Address
+	{
+		OPERAND_LOCATION base;
+		OPERAND_LOCATION index;
+		int offset;
+	};
+
 	struct Operand
 	{
-		enum LOCATION
-		{
-			// General purpose registers
-			R0, R1, R2, R3, R4,
-
-			// Reserved registers
-			SP, BP,
-
-			// Immediate value
-			IMM,
-
-			// Memory address
-			MEM,
-
-			// Label
-			LBL,
-
-			// Condition
-			COND
-		};
-		LOCATION loc;
+		OPERAND_LOCATION loc;
 		size_t size;
+		
+		inline Operand() = default;
+		inline Operand(OPERAND_LOCATION l) 		{ loc = l; }
+        inline Operand(int v)					{ loc = OP_IMM; value = (uint64_t)v; }
+        inline Operand(uint64_t v)				{ loc = OP_IMM; value = v; }
+		inline Operand(Label lbl)				{ loc = OP_LBL; label = lbl; }
+		inline Operand(Memory_Address adr)		{ loc = OP_MEM; address = adr; }
 
 		union // immediate value/memory offset
 		{
 			uint64_t value;
-			uint64_t offset;
 			Label label;
+			Memory_Address address;
 		};
 	};
 

@@ -106,7 +106,7 @@ namespace s22
 	}
 
 	AST
-	ast_decl_proc(Symbol *sym, const Buf<AST> &args, Block *block)
+	ast_decl_proc(Symbol *sym, const Buf<Decl *> &args, Block *block)
 	{
 		AST self = { .kind = AST::DECL_PROC };
 
@@ -203,13 +203,14 @@ namespace s22
 	}
 
 	AST
-	ast_block(const Buf<AST> &stmts)
+	ast_block(const Buf<AST> &stmts, size_t used_stack_size)
 	{
 		AST self = { .kind = AST::BLOCK };
 
 		auto &block = self.as_block;
 		block = alloc<Block>();
 		block->stmts = stmts;
+		block->used_stack_size = used_stack_size;
 
 		return self;
 	}

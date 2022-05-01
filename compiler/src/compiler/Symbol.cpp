@@ -151,10 +151,10 @@ namespace s22
 		// Trace scope upwards until a function is found
 		for (auto scope = self; scope != nullptr; scope = scope->parent_scope)
 		{
-			if (scope->procedure == false)
+			if (scope->return_type_if_proc == false)
 				continue;
 
-			if (*scope->procedure != type)
+			if (*scope->return_type_if_proc != type)
 			{
 				return Error{"type mismatch"};
 			}
@@ -186,7 +186,7 @@ namespace s22
 	}
 
 	Symbol *
-	scope_get_id(Scope *self, const char *id)
+	scope_get_sym(Scope *self, const char *id)
 	{
 		size_t scope_idx_in_parent = self->table.size();
 		for (auto scope = self; scope != nullptr; scope = scope->parent_scope)

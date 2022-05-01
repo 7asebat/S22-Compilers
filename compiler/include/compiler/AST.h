@@ -146,12 +146,12 @@ namespace s22
 	struct Decl_Proc
 	{
 		Symbol *sym;
-		Buf<AST> args;
+		Buf<Decl *> args;
 		Block *block;
 	};
 
 	AST
-	ast_decl_proc(Symbol *sym, const Buf<AST> &args, Block *block);
+	ast_decl_proc(Symbol *sym, const Buf<Decl *> &args, Block *block);
 
 	struct If_Condition
 	{
@@ -216,9 +216,9 @@ namespace s22
 	struct Block
 	{
 		Buf<AST> stmts;
-		size_t stack_offset;
+		size_t used_stack_size;
 	};
 
 	AST
-	ast_block(const Buf<AST> &stmts);
+	ast_block(const Buf<AST> &stmts, size_t used_stack_size = 0);
 }

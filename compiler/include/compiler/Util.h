@@ -110,6 +110,13 @@ namespace s22
 			return self;
 		}
 
+		inline static Buf<T>
+		view(std::vector<T> &vec)
+		{
+			Buf<T> self = { .data = vec.data(), .count = vec.size() };
+			return self;
+		}
+
 		inline T &
 		operator[](size_t i) { return data[i]; }
 

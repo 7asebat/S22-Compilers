@@ -15,7 +15,7 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_id(Scope *scope, const char *id)
 	{
-		auto sym = scope_get_id(scope, id);
+		auto sym = scope_get_sym(scope, id);
 		if (sym == nullptr)
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
@@ -28,7 +28,7 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_assign(Scope *scope, const char *id, const Parse_Unit &right, Asn op)
 	{
-		auto sym = scope_get_id(scope, id);
+		auto sym = scope_get_sym(scope, id);
 		if (sym == nullptr)
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
@@ -117,7 +117,7 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_array_access(Scope *scope, const char *id, const Parse_Unit &expr)
 	{
-		auto sym = scope_get_id(scope, id);
+		auto sym = scope_get_sym(scope, id);
 		if (sym == nullptr)
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
@@ -138,7 +138,7 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params)
 	{
-		auto sym = scope_get_id(scope, id);
+		auto sym = scope_get_sym(scope, id);
 		if (sym == nullptr)
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;

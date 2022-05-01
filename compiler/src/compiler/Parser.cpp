@@ -12,36 +12,34 @@ namespace s22
 			return context.emplace();
 
 		auto &parent = context.top();
-		auto &ctx = context.emplace();
+		auto &inner_ctx = context.emplace();
 
-		ctx.scope = parent.scope;
-		scope_push(ctx.scope);
+		inner_ctx.scope = parent.scope;
+		scope_push(inner_ctx.scope);
 		
-		ctx.stack_offset = parent.stack_offset;
+		inner_ctx.stack_offset = parent.stack_offset;
 
-		return ctx;
+		return inner_ctx;
 	}
 
 	inline static Parser::Context
 	ctx_pop(std::stack<Parser::Context> &context)
 	{
-		auto ctx = std::move(context.top());
+		auto inner_ctx = std::move(context.top());
 		context.pop();
-		scope_pop(ctx.scope);
+		scope_pop(inner_ctx.scope);
 
 		if (context.empty() == false)
 		{
-			context.top().stack_offset = ctx.stack_offset;
-			
-			// TODO: Add stack offset for functions
-			ctx.stack_offset = 0;
+			context.top().stack_offset = inner_ctx.stack_offset;
+			inner_ctx.stack_offset = 0;
 		}
 
-		return ctx;
+		return inner_ctx;
 	}
 
 	void
-	Parser::init()
+	Parser::program_begin()
 	{
 		this->backend = backend_instance();
 		backend_init(this->backend);
@@ -49,6 +47,20 @@ namespace s22
 		// Begin global context
 		auto &ctx = ctx_push(this->context);
 		ctx.scope = &this->global;
+	}
+
+	void
+	Parser::program_end()
+	{
+		// End context
+		auto ctx = ctx_pop(this->context);
+
+		auto ast = ast_block(Buf<AST>::view(ctx.block_stmts));
+		ast.as_block->used_stack_size = ctx.stack_offset;
+
+		parser_log(Error{ "Complete!" }, Log_Level::INFO);
+		backend_compile(this->backend, ast);
+		backend_write(this->backend);
 	}
 
 	void
@@ -71,19 +83,11 @@ namespace s22
 		Parse_Unit self = {};
 
 		// End context
-		// TODO: Assert returns
 		auto ctx = ctx_pop(this->context);
 
 		auto stmts = Buf<AST>::clone(ctx.block_stmts);
 		self.ast = ast_block(stmts);
-		self.ast.as_block->stack_offset = ctx.stack_offset;
-
-		if (this->context.empty())
-		{
-			parser_log(Error{ "Complete!" }, Log_Level::INFO);
-			backend_compile(this->backend, self.ast);
-			backend_write(this->backend);
-		}
+		self.ast.as_block->used_stack_size = ctx.stack_offset;
 
 		return self;
 	}
@@ -178,8 +182,12 @@ namespace s22
 			self.semexpr = expr;
 		}
 
-		if (auto sym = scope_get_id(ctx.scope, id.data))
+		if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
+			// exclude arrays from initialization check
+			if (sym->is_set == false && sym->type.array == 0)
+				parser_log(Error{ loc, "uninitialized identifier" }, Log_Level::WARNING);
+
 			self.ast = ast_symbol(sym);
 		}
 
@@ -204,7 +212,7 @@ namespace s22
 			self.semexpr = expr;
 		}
 
-		if (auto sym = scope_get_id(ctx.scope, id.data))
+		if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
 			self.ast = ast_array_access(sym, right.ast);
 		}
@@ -224,7 +232,7 @@ namespace s22
 				parser_log(err, loc);
 		}
 
-		if (auto sym = scope_get_id(ctx.scope, id.data))
+		if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
 			self.ast = ast_assign((Assignment::KIND)op, ast_symbol(sym), right.ast);
 		}
@@ -313,8 +321,7 @@ namespace s22
 	Parser::pcall(Source_Location loc, const Str &id)
 	{
 		auto ctx = ctx_pop(this->context);
-		auto &list = ctx.proc_call_arguments;
-		Buf<Parse_Unit> params = { .data = list.data(), .count = list.size() };
+		auto params = Buf<Parse_Unit>::view(ctx.proc_call_arguments);
 
 		Parse_Unit self = { .loc = loc };
 		if (auto [expr, err] = semexpr_proc_call(ctx.scope, id.data, params); err)
@@ -334,7 +341,7 @@ namespace s22
 			if (unique_error)
 				parser_log(err, loc);
 		}
-		else if (auto sym = scope_get_id(ctx.scope, id.data))
+		else if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
 			self.semexpr = expr;
 
@@ -440,33 +447,76 @@ namespace s22
 	}
 
 	void
-	Parser::decl_proc_begin(Source_Location loc, const Str &id)
+	Parser::decl_proc_begin()
+	{
+		/**
+		 * The idea is to add declarations within the semantic block
+		 * without generating the statements themselves
+		 * 
+		 * Also to not modify the external stack offset
+		 */
+		auto &parent = this->context.top();
+		auto &inner_ctx = this->context.emplace();
+
+		inner_ctx.scope = parent.scope;
+		scope_push(inner_ctx.scope);
+	}
+
+	void
+	Parser::decl_proc_params_add(const Parse_Unit &arg)
+	{
+		auto &ctx = this->context.top();
+		ctx.decl_proc_arguments.push_back(arg.ast.as_decl);
+	}
+
+	void
+	Parser::decl_proc_params_end(Source_Location loc, const Str &id, const Symbol_Type &ret)
 	{
 		auto &ctx = this->context.top();
 
-		Symbol sym = {
-			.id = id,
-			.type = { .base = Symbol_Type::PROC },
-			.defined_at = loc
-		};
+		Symbol_Type proc = {.base = Symbol_Type::PROC};
+		proc.procedure = scope_make_proc(ctx.scope, ret);
 
-		auto [_, err] = scope_add_decl(ctx.scope, sym);
+		// remove size from context stack offset
+		for (const auto &arg: proc.procedure->parameters)
+		{
+			uint64_t size = std::max(1ui64, arg.array); // in words
+			ctx.stack_offset -= size;
+		}
+
+		Symbol sym = { .id = id, .type = proc, .defined_at = loc };
+
+		auto [_, err] = scope_add_decl(ctx.scope->parent_scope, sym);
 		if (err)
 		{
 			parser_log(err, loc);
 		}
+
+		// Add return type
+		ctx.scope->return_type_if_proc = ret;
 	}
 
-	void
-	Parser::decl_proc_end(const Str &id, Symbol_Type return_type)
+	Parse_Unit
+	Parser::decl_proc_end(const Str &id)
 	{
-		auto &ctx = this->context.top();
+		// Create block statements
+		// Keep old stack offset
+		// Pop context
+		auto proc_ctx = std::move(this->context.top());
+		auto block = ast_block(Buf<AST>::clone(proc_ctx.block_stmts), proc_ctx.stack_offset);
+		auto args = Buf<Decl *>::clone(proc_ctx.decl_proc_arguments);
 
-		if (auto sym = scope_get_id(ctx.scope->parent_scope, id.data))
+		this->context.pop();
+		scope_pop(proc_ctx.scope);
+
+		auto &ctx = this->context.top();
+		Parse_Unit self = {};
+		if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
-			sym->type.procedure = scope_make_proc(ctx.scope, return_type);
-			ctx.scope->procedure = return_type;
+			self.ast = ast_decl_proc(sym, args, block.as_block);
 		}
+
+		return self;
 	}
 
 	void

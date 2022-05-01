@@ -87,7 +87,7 @@
 %%
 
 program:
-	{ p->init(); } stmt_list { $program = p->block_end(); }
+	{ p->program_begin(); } stmt_list { p->program_end(); }
 	;
 
 // stmt *
@@ -215,9 +215,9 @@ decl_const:
 	;
 
 decl_proc:
-	IDENTIFIER ':' PROC                         { p->decl_proc_begin(@IDENTIFIER, $IDENTIFIER); p->block_begin(); }
-	'(' decl_proc_params ')' decl_proc_return   { p->decl_proc_end($IDENTIFIER, $decl_proc_return); }
-		block_no_action                         { $$ = p->block_end(); }
+	IDENTIFIER ':' PROC                         { p->decl_proc_begin(); }
+	'(' decl_proc_params ')' decl_proc_return   { p->decl_proc_params_end(@IDENTIFIER, $IDENTIFIER, $decl_proc_return); }
+		block_no_action                         { $$ = p->decl_proc_end($IDENTIFIER); }
 	;
 
 
@@ -229,8 +229,8 @@ decl_proc_params:
 	;
 
 decl_proc_params_list:
-	decl_proc_params_list ',' decl_var
-	| decl_var
+	decl_proc_params_list ',' decl_var			{ p->decl_proc_params_add($decl_var); }
+	| decl_var									{ p->decl_proc_params_add($decl_var); }
 	;
 
 // return ?

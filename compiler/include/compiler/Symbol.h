@@ -96,9 +96,8 @@ namespace s22
 
 		Scope *parent_scope;
 		size_t idx_in_parent_table;
-		size_t stack_offset;
 
-		Optional<Symbol_Type> procedure;
+		Optional<Symbol_Type> return_type_if_proc;
 	};
 
 	Result<Symbol *>
@@ -117,7 +116,7 @@ namespace s22
 	scope_pop(Scope *&self);
 
 	Symbol *
-	scope_get_id(Scope *self, const char *id);
+	scope_get_sym(Scope *self, const char *id);
 
 	Procedure
 	scope_make_proc(Scope *self, Symbol_Type return_type);

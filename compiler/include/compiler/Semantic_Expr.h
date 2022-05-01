@@ -10,7 +10,6 @@ namespace s22
 	{
 		bool is_literal;
 		Symbol_Type type;
-		// TODO: UNINITIALIZED VARIABLES
 	};
 
 	enum class Asn

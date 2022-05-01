@@ -29,7 +29,10 @@ namespace s22
 	struct Parser
 	{
 		void
-		init();
+		program_begin();
+
+		void
+		program_end();
 
 		void
 		block_begin();
@@ -89,10 +92,16 @@ namespace s22
 		decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right);
 
 		void
-		decl_proc_begin(Source_Location loc, const Str &id);
+		decl_proc_begin();
 
 		void
-		decl_proc_end(const Str &id, Symbol_Type return_type);
+		decl_proc_params_add(const Parse_Unit &arg);
+
+		void
+		decl_proc_params_end(Source_Location loc, const Str &id, const Symbol_Type &ret);
+
+		Parse_Unit
+		decl_proc_end(const Str &id);
 
 		Parse_Unit
 		if_cond(const Parse_Unit &cond, const Parse_Unit &block, const Parse_Unit &next);
@@ -133,12 +142,11 @@ namespace s22
 		Parse_Unit
 		for_loop(Source_Location loc, const Parse_Unit &init, const Parse_Unit &cond, const Parse_Unit &post);
 
-		Scope global;
-
 		struct Context
 		{
 			Scope *scope;
 			std::vector<Parse_Unit> proc_call_arguments;
+			std::vector<Decl *> decl_proc_arguments;
 			std::vector<AST> block_stmts;
 			size_t stack_offset;
 
@@ -152,7 +160,7 @@ namespace s22
 			Block *switch_default;
 		};
 		std::stack<Context> context;
-
+		Scope global;
 		Backend backend;
 	};
 

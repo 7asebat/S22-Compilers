@@ -27,6 +27,10 @@ namespace s22
 
 		// Logical unary
 		I_LOG_NOT,
+
+		// Procedures and stack
+		I_PUSH, I_POP,
+		I_CALL, I_RET,
 	};
 
 	Backend

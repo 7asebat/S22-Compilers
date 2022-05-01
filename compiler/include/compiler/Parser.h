@@ -38,7 +38,7 @@ namespace s22
 		block_begin();
 
 		void
-		block_add(const Parse_Unit &unit);
+		block_add(const Parse_Unit &stmt);
 
 		Parse_Unit
 		block_end();
@@ -109,14 +109,11 @@ namespace s22
 		Parse_Unit
 		else_if_cond(Parse_Unit &prev, const Parse_Unit &cond, const Parse_Unit &block);
 
-		Parse_Unit
-		switch_stmt(const Parse_Unit &expr);
-
 		void
-		switch_begin(Source_Location loc, const Parse_Unit &expr);
+		switch_begin(const Parse_Unit &expr);
 
 		Parse_Unit
-		switch_end();
+		switch_end(Source_Location loc);
 
 		void
 		switch_case_begin(Source_Location loc);
@@ -162,6 +159,7 @@ namespace s22
 		std::stack<Context> context;
 		Scope global;
 		Backend backend;
+		bool has_errors;
 	};
 
 	enum class Log_Level
@@ -171,6 +169,9 @@ namespace s22
 		ERROR,
 		CRITICAL,
 	};
+
+	Parser *
+	parser_instance();
 
 	void
 	parser_log(const Error &err, Log_Level lvl = Log_Level::INFO);

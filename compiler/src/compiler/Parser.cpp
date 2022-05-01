@@ -6,32 +6,34 @@
 namespace s22
 {
 	inline static Parser::Context&
-	ctx_push(std::stack<Parser::Context> &context)
+	ctx_push(std::stack<Parser::Context> &ctx)
 	{
-		if (context.empty())
-			return context.emplace();
+		if (ctx.empty())
+			return ctx.emplace();
 
-		auto &parent = context.top();
-		auto &inner_ctx = context.emplace();
+		auto &parent = ctx.top();
+		auto &inner_ctx = ctx.emplace();
 
 		inner_ctx.scope = parent.scope;
 		scope_push(inner_ctx.scope);
-		
+
+		// One stack offset for any nested scope
 		inner_ctx.stack_offset = parent.stack_offset;
 
 		return inner_ctx;
 	}
 
 	inline static Parser::Context
-	ctx_pop(std::stack<Parser::Context> &context)
+	ctx_pop(std::stack<Parser::Context> &ctx)
 	{
-		auto inner_ctx = std::move(context.top());
-		context.pop();
+		auto inner_ctx = std::move(ctx.top());
+		ctx.pop();
 		scope_pop(inner_ctx.scope);
 
-		if (context.empty() == false)
+		// One stack offset for any nested scope
+		if (ctx.empty() == false)
 		{
-			context.top().stack_offset = inner_ctx.stack_offset;
+			ctx.top().stack_offset = inner_ctx.stack_offset;
 			inner_ctx.stack_offset = 0;
 		}
 
@@ -41,8 +43,8 @@ namespace s22
 	void
 	Parser::program_begin()
 	{
+		// Start instance
 		this->backend = backend_instance();
-		backend_init(this->backend);
 
 		// Begin global context
 		auto &ctx = ctx_push(this->context);
@@ -55,12 +57,21 @@ namespace s22
 		// End context
 		auto ctx = ctx_pop(this->context);
 
+		// Program blocks
 		auto ast = ast_block(Buf<AST>::view(ctx.block_stmts));
 		ast.as_block->used_stack_size = ctx.stack_offset;
 
-		parser_log(Error{ "Complete!" }, Log_Level::INFO);
-		backend_compile(this->backend, ast);
-		backend_write(this->backend);
+		// Set using parser_log
+		if (this->has_errors == false)
+		{
+			parser_log(Error{ "Complete!" }, Log_Level::INFO);
+			backend_compile(this->backend, ast);
+			backend_write(this->backend);
+		}
+		else
+		{
+			parser_log(Error{ "Complete with errors!" }, Log_Level::INFO);
+		}
 	}
 
 	void
@@ -71,10 +82,10 @@ namespace s22
 	}
 
 	void
-	Parser::block_add(const Parse_Unit &unit)
+	Parser::block_add(const Parse_Unit &stmt)
 	{
 		auto &ctx = this->context.top();
-		ctx.block_stmts.push_back(unit.ast);
+		ctx.block_stmts.push_back(stmt.ast);
 	}
 
 	Parse_Unit
@@ -85,6 +96,7 @@ namespace s22
 		// End context
 		auto ctx = ctx_pop(this->context);
 
+		// Build block from statements found in the context
 		auto stmts = Buf<AST>::clone(ctx.block_stmts);
 		self.ast = ast_block(stmts);
 		self.ast.as_block->used_stack_size = ctx.stack_offset;
@@ -98,7 +110,7 @@ namespace s22
 		Parse_Unit self = {};
 
 		auto &ctx = this->context.top();
-		if (auto [proc_sym, err] = scope_return_is_valid(ctx.scope, SYMTYPE_VOID); err)
+		if (auto [proc_sym, err] = scope_return_matches_proc_sym(ctx.scope, SYMTYPE_VOID); err)
 		{
 			parser_log(err, loc);
 		}
@@ -116,8 +128,7 @@ namespace s22
 		Parse_Unit self = {};
 
 		auto &ctx = this->context.top();
-
-		if (auto [proc_sym, err] = scope_return_is_valid(ctx.scope, expr.semexpr.type); err)
+		if (auto [proc_sym, err] = scope_return_matches_proc_sym(ctx.scope, expr.semexpr.type); err)
 		{
 			if (expr.err == false)  // Limit error propagation
 				parser_log(err, expr.loc);
@@ -135,10 +146,10 @@ namespace s22
 	{
 		Parse_Unit self = {};
 
-		If_Condition *next_if = {};
+		If_Condition *next_if = nullptr;
 		if (next.ast.kind != AST::NIL)
 		{
-			// Find the earliest point to join
+			// Find the first if condition to join to
 			for (auto n = next.ast.as_if; n != nullptr; n = n->prev)
 				next_if = n;
 		}
@@ -171,37 +182,25 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::switch_stmt(const Parse_Unit &expr)
-	{
-		Parse_Unit self = {};
-		return self;
-	}
-
-	Parse_Unit
 	Parser::id(Source_Location loc, const Str &id)
 	{
-		auto &ctx = this->context.top();
-
 		Parse_Unit self = { .loc = loc };
 		self.loc = loc;
 
-		if (auto [expr, err] = semexpr_id(ctx.scope, id.data); err)
+		auto &ctx = this->context.top();
+		if (auto [expr, err] = semexpr_id(ctx.scope, id.data); err)	// Verify semantics
 		{
 			self.err = Error{loc, err};
 
 			parser_log(err, loc);
 		}
-		else
-		{
-			self.semexpr = expr;
-		}
-
-		if (auto sym = scope_get_sym(ctx.scope, id.data))
+		else if (auto sym = scope_get_sym(ctx.scope, id.data))		// Build AST
 		{
 			// exclude arrays from initialization check
 			if (sym->is_set == false && sym->type.array == 0)
 				parser_log(Error{ loc, "uninitialized identifier" }, Log_Level::WARNING);
 
+			self.semexpr = expr;
 			self.ast = ast_symbol(sym);
 		}
 
@@ -211,9 +210,9 @@ namespace s22
 	Parse_Unit
 	Parser::array(Source_Location loc, const Str &id, const Parse_Unit &right)
 	{
+		Parse_Unit self = {.loc = loc};
+		
 		auto &ctx = this->context.top();
-
-		Parse_Unit self = { .loc = loc };
 		if (auto [expr, err] = semexpr_array_access(ctx.scope, id.data, right); err)
 		{
 			self.err = Error{loc, err};
@@ -221,13 +220,9 @@ namespace s22
 			if (right.err == false)
 				parser_log(err, loc);
 		}
-		else
+		else if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
 			self.semexpr = expr;
-		}
-
-		if (auto sym = scope_get_sym(ctx.scope, id.data))
-		{
 			self.ast = ast_array_access(sym, right.ast);
 		}
 
@@ -237,16 +232,17 @@ namespace s22
 	Parse_Unit
 	Parser::assign(Source_Location loc, const Str &id, Asn op, const Parse_Unit &right)
 	{
+		Parse_Unit self = {.loc = loc};
+		
 		auto &ctx = this->context.top();
-
-		Parse_Unit self = {};
 		if (auto [expr, err] = semexpr_assign(ctx.scope, id.data, right, op); err)
 		{
+			self.err = Error{loc, err};
+
 			if (right.err == false)
 				parser_log(err, loc);
 		}
-
-		if (auto sym = scope_get_sym(ctx.scope, id.data))
+		else if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
 			self.ast = ast_assign((Assignment::KIND)op, ast_symbol(sym), right.ast);
 		}
@@ -257,9 +253,9 @@ namespace s22
 	Parse_Unit
 	Parser::array_assign(Source_Location loc, const Parse_Unit &left, Asn op, const Parse_Unit &right)
 	{
+		Parse_Unit self = {.loc = loc};
+		
 		auto &ctx = this->context.top();
-
-		Parse_Unit self = {};
 		if (auto [expr, err] = semexpr_array_assign(ctx.scope, left, right, op); err)
 		{
 			if (right.err == false)
@@ -277,9 +273,9 @@ namespace s22
 	Parse_Unit
 	Parser::binary(Source_Location loc, const Parse_Unit &left, Bin op, const Parse_Unit &right)
 	{
-		auto &ctx = this->context.top();
+		Parse_Unit self = {.loc = loc};
 
-		Parse_Unit self = { .loc = loc };
+		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_binary(ctx.scope, left, right, op); err)
 		{
 			self.err = Error{loc, err};
@@ -299,9 +295,9 @@ namespace s22
 	Parse_Unit
 	Parser::unary(Source_Location loc, Uny op, const Parse_Unit &right)
 	{
-		auto &ctx = this->context.top();
+		Parse_Unit self = {.loc = loc};
 
-		Parse_Unit self = { .loc = loc };
+		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_unary(ctx.scope, right, op); err)
 		{
 			self.err = Error{loc, err};
@@ -334,10 +330,11 @@ namespace s22
 	Parse_Unit
 	Parser::pcall(Source_Location loc, const Str &id)
 	{
+		Parse_Unit self = {.loc = loc};
+		
 		auto ctx = ctx_pop(this->context);
 		auto params = Buf<Parse_Unit>::view(ctx.proc_call_arguments);
 
-		Parse_Unit self = { .loc = loc };
 		if (auto [expr, err] = semexpr_proc_call(ctx.scope, id.data, params); err)
 		{
 			self.err = Error{loc, err};
@@ -372,18 +369,15 @@ namespace s22
 	Parse_Unit
 	Parser::decl(Source_Location loc, const Str &id, Symbol_Type type)
 	{
-		auto &ctx = this->context.top();
-
-		Parse_Unit self = {};
+		Parse_Unit self = { .loc = loc };
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
-
-		auto [sym, err] = scope_add_decl(ctx.scope, symbol);
-		if (err)
+		
+		auto &ctx = this->context.top();
+		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol); err)
 		{
 			parser_log(err, loc);
 		}
-
-		if (err == false)
+		else
 		{
 			ctx.stack_offset += 1;
 			self.ast = ast_decl(sym, AST{});
@@ -394,42 +388,43 @@ namespace s22
 	Parse_Unit
 	Parser::decl_expr(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
-		auto &ctx = this->context.top();
-
-		Parse_Unit self = {};
+		Parse_Unit self = { .loc = loc };
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 
-		auto [sym, err] = scope_add_decl(ctx.scope, symbol, right);
-		if (err && right.err == false)
+		auto &ctx = this->context.top();
+		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol, right); err)
 		{
-			parser_log(err, loc);
-		}
+			self.err = Error{loc, err};
 
-		if (err == false)
+			if (right.err == false)
+				parser_log(err, loc);
+		}
+		else
 		{
 			ctx.stack_offset += 1;
 			self.ast = ast_decl(sym, right.ast);
 		}
-
+		
 		return self;
 	}
 
 	Parse_Unit
 	Parser::decl_array(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
-		auto &ctx = this->context.top();
-
-		Parse_Unit self = {};
+		Parse_Unit self = { .loc = loc };
+		
 		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
 		symbol.type.array = right.ast.as_lit->value;
 
-		auto [sym, err] = scope_add_decl(ctx.scope, symbol);
-		if (err && right.err == false)
+		auto &ctx = this->context.top();
+		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol); err)
 		{
-			parser_log(err, loc);
-		}
+			self.err = Error{loc, err};
 
-		if (err == false)
+			if (right.err == false)
+				parser_log(err, loc);
+		}
+		else
 		{
 			ctx.stack_offset += symbol.type.array;
 			self.ast = ast_decl(sym, AST{});
@@ -440,18 +435,18 @@ namespace s22
 	Parse_Unit
 	Parser::decl_const(Source_Location loc, const Str &id, Symbol_Type type, const Parse_Unit &right)
 	{
+		Parse_Unit self = {.loc = loc};
+		Symbol symbol = {.id = id, .type = type, .defined_at = loc, .is_constant = true};
+
 		auto &ctx = this->context.top();
-
-		Parse_Unit self = {};
-		Symbol symbol = { .id = id, .type = type, .defined_at = loc, .is_constant = true };
-
-		auto [sym, err] = scope_add_decl(ctx.scope, symbol, right);
-		if (err && right.err == false)
+		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol, right); err)
 		{
-			parser_log(err, loc);
-		}
+			self.err = Error{loc, err};
 
-		if (err == false)
+			if (right.err == false)
+				parser_log(err, loc);
+		}
+		else
 		{
 			ctx.stack_offset += 1;
 			self.ast = ast_decl(sym, right.ast);
@@ -464,10 +459,10 @@ namespace s22
 	Parser::decl_proc_begin()
 	{
 		/**
-		 * The idea is to add declarations within the semantic block
+		 * Add declarations within the semantic block
 		 * without generating the statements themselves
 		 * 
-		 * Also to not modify the external stack offset
+		 * Also, do not modify the external stack offset
 		 */
 		auto &parent = this->context.top();
 		auto &inner_ctx = this->context.emplace();
@@ -488,17 +483,17 @@ namespace s22
 	{
 		auto &ctx = this->context.top();
 
-		Symbol_Type proc = {.base = Symbol_Type::PROC};
-		proc.procedure = scope_make_proc(ctx.scope, ret);
+		Symbol_Type proc_type = {.base = Symbol_Type::PROC};
+		proc_type.procedure = scope_make_proc(ctx.scope, ret);
 
 		// remove size from context stack offset
-		for (const auto &arg: proc.procedure->parameters)
+		for (const auto &arg: proc_type.procedure->parameters)
 		{
 			uint64_t size = std::max(1ui64, arg.array); // in words
 			ctx.stack_offset -= size;
 		}
 
-		Symbol symbol = { .id = id, .type = proc, .defined_at = loc };
+		Symbol symbol = { .id = id, .type = proc_type, .defined_at = loc };
 		if (auto [sym, err] = scope_add_decl(ctx.scope->parent_scope, symbol); err)
 		{
 			parser_log(err, loc);
@@ -513,6 +508,8 @@ namespace s22
 	Parse_Unit
 	Parser::decl_proc_end(const Str &id)
 	{
+		Parse_Unit self = {};
+		
 		// Create block statements
 		// Keep old stack offset
 		// Pop context
@@ -524,9 +521,9 @@ namespace s22
 		scope_pop(proc_ctx.scope);
 
 		auto &ctx = this->context.top();
-		Parse_Unit self = {};
 		if (auto sym = scope_get_sym(ctx.scope, id.data))
 		{
+			self.loc = sym->defined_at;
 			self.ast = ast_decl_proc(sym, args, block.as_block);
 		}
 
@@ -534,7 +531,7 @@ namespace s22
 	}
 
 	void
-	Parser::switch_begin(Source_Location loc, const Parse_Unit &expr)
+	Parser::switch_begin(const Parse_Unit &expr)
 	{
 		if (symtype_is_integral(expr.semexpr.type) == false)
 			return parser_log(Error{ expr.loc, "invalid type" });
@@ -544,15 +541,17 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::switch_end()
+	Parser::switch_end(Source_Location loc)
 	{
+		Parse_Unit self = { .loc = loc };
+		
 		auto ctx = ctx_pop(this->context);
 
+		// Collect switch cases from context
 		auto switch_cases = Buf<Switch_Case*>::make(ctx.switch_cases.size());
 		for (size_t i = 0; i < switch_cases.count; i++)
 			switch_cases[i] = ctx.switch_cases[i].ast_sw_case;
 
-		Parse_Unit self = {};
 		self.ast = ast_switch(switch_cases, ctx.switch_default);
 		return self;
 	}
@@ -569,7 +568,6 @@ namespace s22
 	Parser::switch_case_add(const Parse_Unit &literal)
 	{
 		auto &expr = literal.semexpr;
-		auto &ctx = this->context.top();
 
 		if (expr.is_literal == false || symtype_is_integral(expr.type) == false)
 		{
@@ -580,7 +578,8 @@ namespace s22
 		}
 
 		// Look for duplicates in all cases
-		for (auto &sw_case: ctx.switch_cases)
+		auto &ctx = this->context.top();
+		for (auto &sw_case : ctx.switch_cases)
 		{
 			for (auto &lit: sw_case.group)
 			{
@@ -599,7 +598,7 @@ namespace s22
 	{
 		auto &ctx = this->context.top();
 
-		// Add lit to last case
+		// Add literals in last case
 		auto &last_case = ctx.switch_cases.back();
 
 		auto group = Buf<Literal*>::make(last_case.group.size());
@@ -623,7 +622,7 @@ namespace s22
 	Parse_Unit
 	Parser::while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block)
 	{
-		Parse_Unit self = {};
+		Parse_Unit self = { .loc = loc };
 		self.ast = ast_while(cond.ast, block.ast.as_block);
 		return self;
 	}
@@ -631,7 +630,7 @@ namespace s22
 	Parse_Unit
 	Parser::do_while_loop(Source_Location loc, const Parse_Unit &cond, const Parse_Unit &block)
 	{
-		Parse_Unit self = {};
+		Parse_Unit self = { .loc = loc };
 		self.ast = ast_do_while(cond.ast, block.ast.as_block);
 		return self;
 	}
@@ -645,10 +644,17 @@ namespace s22
 	Parse_Unit
 	Parser::for_loop(Source_Location loc, const Parse_Unit &init, const Parse_Unit &cond, const Parse_Unit &post)
 	{
-		Parse_Unit self = {};
+		Parse_Unit self = { .loc = loc };
 		auto block = this->block_end();
 		self.ast = ast_for(init.ast, cond.ast, post.ast, block.ast.as_block);
 		return self;
+	}
+
+	Parser *
+	parser_instance()
+	{
+		static Parser self = {};
+		return &self;
 	}
 
 	void
@@ -660,6 +666,10 @@ namespace s22
 	void
 	parser_log(const Error &err, Source_Location loc, Log_Level lvl)
 	{
+		auto parser = parser_instance();
+		if (lvl == Log_Level::ERROR)
+			parser->has_errors = true;
+
 		// Fill with loc if error has none
 		auto msg = std::format("{}: {}", lvl, err);
 

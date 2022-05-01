@@ -99,16 +99,10 @@ namespace s22
 		Label label;
 	};
 
-	struct Proc
-	{
-		uint8_t argument_sizes[64];
-		uint8_t return_size;
-		uint64_t return_address;
-	};
-
 	struct IBackend
 	{
 		bool is_used[RDX + 1];
+		bool has_errors;
 
 		std::unordered_map<const Symbol*, Operand> variables;
 		std::stack<size_t> stack_frame;
@@ -191,12 +185,6 @@ namespace s22
 		}
 	}
 
-	inline static bool
-	is_mem_to_mem(Operand src, Operand dst)
-	{
-		return src.loc == OP_MEM && dst.loc == OP_MEM;
-	}
-
 	inline static Operand
 	be_get_reg(Backend self)
 	{
@@ -214,7 +202,7 @@ namespace s22
 	inline static std::pair<Operand, Operand>
 	be_prepare_operands(Backend self, Operand op1, Operand op2)
 	{
-		if (is_mem_to_mem(op1, op2) == false)
+		if (op1.loc != OP_MEM || op2.loc != OP_MEM)
 			return { op1, op2 };
 		
 		auto reg = be_get_reg(self);
@@ -797,14 +785,13 @@ namespace s22
 
 		case AST::SWITCH: {
 			Label end_switch = { .type = Label::END_SWITCH, .id = make_label_id() };
-			AST case_ast = { .kind = AST::SWITCH_CASE };
 
 			auto sw = ast.as_switch;
 
 			for (auto &swc: sw->cases)
 			{
 				Label end_case = { .type = Label::END_CASE, .id = make_label_id() };
-				case_ast.as_case = swc;
+				AST case_ast = { .kind = AST::SWITCH_CASE, .as_case = swc };
 				be_branch_if_false(self, case_ast, end_case);
 				be_clear_reg_all(self);
 
@@ -894,10 +881,10 @@ namespace s22
 			auto &ret = ast.as_return;
 			auto expr = be_generate(self, ret->expr);
 
-			Operand dst = {self->variables[ret->sym].address};
+			Operand dst = {self->variables[ret->proc_sym].address};
 			be_assign(self, I_MOV, dst, expr);
 			
-			Label return_lbl = {.type = Label::END_PROC, .text = ret->sym->id};
+			Label return_lbl = {.type = Label::END_PROC, .text = ret->proc_sym->id};
 			be_instruction(self, I_BR, return_lbl);
 
 			// BRANCH TO END
@@ -917,14 +904,6 @@ namespace s22
 	}
 
 	void
-	backend_init(Backend self)
-	{
-		// Begin a new offset/code path
-		self->stack_frame.push(0);
-	}
-
-
-	void
 	backend_write(Backend self)
 	{
 		for (const auto &ins : self->program)
@@ -934,7 +913,9 @@ namespace s22
 	void
 	backend_compile(Backend self, AST ast)
 	{
-		be_generate(self, ast);
+		// Start root stack frame at 0
+		self->stack_frame.push(0);
+		be_block(self, ast.as_block);
 	}
 }
 

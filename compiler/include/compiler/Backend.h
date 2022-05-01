@@ -37,9 +37,6 @@ namespace s22
 	backend_instance();
 
 	void
-	backend_init(Backend self);
-
-	void
 	backend_write(Backend self);
 
 	void

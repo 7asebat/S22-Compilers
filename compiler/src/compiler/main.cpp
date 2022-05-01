@@ -20,8 +20,8 @@ main(int argc, char *argv[])
 		yydebug = 1;
 
 	// Run parser
-	s22::Parser parser = {};
-	yyparse(&parser);
+	auto parser = s22::parser_instance();
+	yyparse(parser);
 
 	fclose(yyin);
 	return 0;

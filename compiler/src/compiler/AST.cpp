@@ -223,7 +223,7 @@ namespace s22
 		auto &ret = self.as_return;
 		ret = alloc<Return>();
 		ret->expr = expr;
-		ret->sym = sym;
+		ret->proc_sym = sym;
 
 		return self;
 	}

@@ -155,7 +155,7 @@ namespace s22
 				return Error{ params[i].loc, "invalid argument" };
 		}
 
-		Semantic_Expr self {};
+		Semantic_Expr self = {};
 		self.type = sym->type.procedure->return_type;
 
 		return self;

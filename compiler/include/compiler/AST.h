@@ -228,7 +228,7 @@ namespace s22
 	struct Return
 	{
 		AST expr;
-		Symbol *sym;
+		Symbol *proc_sym;
 	};
 
 	AST

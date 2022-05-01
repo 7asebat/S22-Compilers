@@ -110,7 +110,7 @@ namespace s22
 	scope_push(Scope *&self);
 
 	Result<Symbol *>
-	scope_return_is_valid(Scope *self, Symbol_Type type);
+	scope_return_matches_proc_sym(Scope *self, Symbol_Type type);
 
 	Scope *
 	scope_pop(Scope *&self);
@@ -121,44 +121,3 @@ namespace s22
 	Procedure
 	scope_make_proc(Scope *self, Symbol_Type return_type);
 }
-
-template<>
-struct std::formatter<s22::Symbol_Type> : std::formatter<std::string>
-{
-	auto
-	format(const s22::Symbol_Type &type, format_context &ctx)
-	{
-		using namespace s22;
-		if (type.procedure)
-		{
-			format_to(ctx.out(), "proc(");
-			{
-				format_to(ctx.out(), "{}", type.procedure->parameters);
-			}
-			format_to(ctx.out(), ")");
-
-			if (type.procedure->return_type != SYMTYPE_VOID)
-			{
-				format_to(ctx.out(), " -> ");
-				format_to(ctx.out(), "{}", type.procedure->return_type);
-			}
-		}
-		else
-		{
-			if (type.array)
-			{
-				format_to(ctx.out(), "[{}]", type.array);
-			}
-
-			switch (type.base)
-			{
-			case s22::Symbol_Type::INT: return format_to(ctx.out(), "int");
-			case s22::Symbol_Type::UINT: return format_to(ctx.out(), "uint");
-			case s22::Symbol_Type::FLOAT: return format_to(ctx.out(), "float");
-			case s22::Symbol_Type::BOOL: return format_to(ctx.out(), "bool");
-			default: break;
-			}
-		}
-		return ctx.out();
-	}
-};

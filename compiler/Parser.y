@@ -133,8 +133,8 @@ conditional:
 	c_else              { $$ = p->if_cond($expr, $block, $c_else); }
 
 	|
-	SWITCH expr         { p->switch_begin(@SWITCH, $expr); }
-	'{' switch_list '}' { $$ = p->switch_end(); }
+	SWITCH expr         { p->switch_begin($expr); }
+	'{' switch_list '}' { $$ = p->switch_end(@SWITCH); }
 	;
 
 c_else:

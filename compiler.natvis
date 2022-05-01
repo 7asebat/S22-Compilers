@@ -19,6 +19,7 @@
       <ExpandedItem Condition="kind == s22::AST::WHILE">as_while</ExpandedItem>
       <ExpandedItem Condition="kind == s22::AST::FOR">as_for</ExpandedItem>
       <ExpandedItem Condition="kind == s22::AST::BLOCK">as_block</ExpandedItem>
+      <ExpandedItem Condition="kind == s22::AST::RETURN">as_return</ExpandedItem>
     </Expand>
   </Type>
 

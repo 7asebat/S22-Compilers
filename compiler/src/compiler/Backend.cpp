@@ -28,7 +28,7 @@ namespace s22
 			FOR, END_FOR,
 			WHILE, END_WHILE,
 
-			PROC,
+			PROC, END_PROC,
 		};
 		TYPE type;
 		uint64_t id;
@@ -85,9 +85,9 @@ namespace s22
 		union // immediate value/memory offset
 		{
 			uint64_t value;
-			Label label;
 			Memory_Address address;
 		};
+		Label label;
 	};
 
 	struct Instruction
@@ -378,14 +378,27 @@ namespace s22
 	}
 
 	inline static void
-	be_decl_proc(Backend self, Decl_Proc *proc)
+	be_decl_proc(Backend self, Decl_Proc *proc, Label proc_lbl)
 	{
-		Label proc_lbl = {.type = Label::PROC, .text = proc->sym->id};
+		Operand proc_opr = {proc_lbl};
 		self->variables[proc->sym] = {proc_lbl};
 
 		// Begin a new stack frame
-		int offset = 0;
-		self->stack_frame.push(offset);
+		self->stack_frame.push(0);
+
+		int offset = 1; // [RBP]: Return address
+
+		// Return value
+		if (proc->sym->type.procedure->return_type != SYMTYPE_VOID)
+		{
+			uint64_t size = std::max(1ui64, proc->sym->type.procedure->return_type.array);
+
+			offset += size;
+			Memory_Address adr = { .base = RBP, .offset = offset };
+			
+			// Where the return address symbol is
+			self->variables[proc->sym].address = adr;
+		}
 
 		// Add arguments
 		for (const auto &arg: proc->args)
@@ -393,10 +406,9 @@ namespace s22
 			auto sym = arg->sym;
 			uint64_t size = std::max(1ui64, sym->type.array); // in words
 
-			// SP - size
 			offset += size;
-
 			Memory_Address adr = { .base = RBP, .offset = offset };
+
 			self->variables[sym] = { adr };
 			self->variables[sym].size = size;
 		}
@@ -475,8 +487,8 @@ namespace s22
 		return dst;
 	}
 
-	Operand
-	backend_unary(Backend self, INSTRUCTION_OP op, Operand right)
+	inline static Operand
+	be_unary(Backend self, INSTRUCTION_OP op, Operand right)
 	{
 		auto dst = be_get_reg(self);
 		be_use_reg(self, dst);
@@ -494,43 +506,60 @@ namespace s22
 		return dst;
 	}
 
-	Operand
-	backend_pcall(Backend self, Proc_Call *pcall)
+	inline static Operand
+	be_proc_call(Backend self, Proc_Call *pcall)
 	{
-		// Add arguments to stack, last to first
-		size_t stack_offset = 0;
+		int offset = 0;
 		auto &proc = *pcall->sym->type.procedure;
 
 		for (const auto &arg : proc.parameters)
-			stack_offset += std::max(1ui64, arg.array);
-		
-		if (stack_offset > 0)
+			offset += std::max(1ui64, arg.array);
+
+		int offset_before_return_value = offset;
+
+		// Add return type to stack
+		if (proc.return_type != SYMTYPE_VOID)
 		{
-			be_instruction(self, I_SUB, RSP, stack_offset);
-			stack_offset = 0;
-
-			for (auto arg : pcall->args)
-			{
-				auto src = be_generate(self, arg);
-				stack_offset += src.size;
-
-				Memory_Address dst = {.base = RBP, .offset = -(int)stack_offset };
-				be_instruction(self, I_MOV, dst, src);
-			}
+			offset += std::max(1ui64, proc.return_type.array);
 		}
 
-  		// call function
-		be_instruction(self, I_CALL, be_sym(self, pcall->sym));
+		if (offset > 0)
+		{
+			be_instruction(self, I_SUB, RSP, offset);
+			{
+				int offset = offset_before_return_value;
 
-		// remove call arguments
-		be_instruction(self, I_SUB, RSP, stack_offset);
+				// Add arguments to stack
+				for (auto arg : pcall->args)
+				{
+					auto src = be_generate(self, arg);
+					Memory_Address dst = {.base = RBP, .offset = -offset };
+					be_instruction(self, I_MOV, dst, src);
 
-		// TODO: Return values on stack
-		return {};
+					offset -= src.size;
+				}
+			}
+
+			// call function
+			be_instruction(self, I_CALL, be_sym(self, pcall->sym));
+
+			// remove call arguments
+			be_instruction(self, I_ADD, RSP, offset);
+		}
+		else
+		{
+			// call function
+			be_instruction(self, I_CALL, be_sym(self, pcall->sym));
+		}
+
+		Operand ret = {};
+		ret.loc = OP_MEM;
+		ret.address = {.base = RBP, .offset = -offset};
+		return ret;
 	}
 
-	void
-	backend_push_stack_frame(Backend self)
+	inline static void
+	be_push_stack_frame(Backend self)
 	{
 		// save old stack frame
 		be_instruction(self, I_PUSH, RBP);
@@ -538,8 +567,8 @@ namespace s22
 		self->stack_frame.push(0);
 	}
 
-	void
-	backend_pop_stack_frame(Backend self)
+	inline static void
+	be_pop_stack_frame(Backend self)
 	{
 		// restore old stack frame
 		be_instruction(self, I_MOV, RSP, RBP);
@@ -547,10 +576,10 @@ namespace s22
 		self->stack_frame.pop();
 	}
 
-	void
-	backend_block(Backend self, Block *blk)
+	inline static void
+	be_block(Backend self, Block *blk)
 	{
-		if (blk->used_stack_size != 0)
+		if (blk->used_stack_size > 0)
 		{
 			be_instruction(self, I_SUB, RSP, blk->used_stack_size);
 
@@ -566,8 +595,25 @@ namespace s22
 		}
 	}
 
-	void
-	branch_if_false(Backend self, AST ast, Label branch_to)
+	inline static void
+	be_block_no_stack_restore(Backend self, Block *blk)
+	{
+		if (blk->used_stack_size > 0)
+		{
+			be_instruction(self, I_SUB, RSP, blk->used_stack_size);
+
+			for (auto stmt: blk->stmts)
+				be_generate(self, stmt);
+		}
+		else
+		{
+			for (auto stmt : blk->stmts)
+				be_generate(self, stmt);
+		}
+	}
+
+	inline static void
+	be_branch_if_false(Backend self, AST ast, Label branch_to)
 	{
 		switch (ast.kind)
 		{
@@ -592,19 +638,19 @@ namespace s22
 			}
 			else if (op == I_LOG_AND)
 			{
-				branch_if_false(self, bin->left, branch_to);
-				branch_if_false(self, bin->right, branch_to);
+				be_branch_if_false(self, bin->left, branch_to);
+				be_branch_if_false(self, bin->right, branch_to);
 			}
 			else if (op == I_LOG_OR)
 			{
 				Label lbl_true = {.type = Label::OR_TRUE, .id = branch_to.id};
 
 				Label left_is_false = {.type = Label::COND_FALSE, .id = make_label_id()};
-				branch_if_false(self, bin->left, left_is_false);
+				be_branch_if_false(self, bin->left, left_is_false);
 				be_instruction(self, I_BR, lbl_true);
 
 				be_label(self, left_is_false);
-				branch_if_false(self, bin->right, branch_to);
+				be_branch_if_false(self, bin->right, branch_to);
 				be_instruction(self, I_BR, lbl_true);
 
 				be_label(self, lbl_true);
@@ -632,7 +678,7 @@ namespace s22
 			else // NOT
 			{
 				Label lbl_true = {.type = Label::NOT_TRUE, .id = branch_to.id};
-				branch_if_false(self, uny->right, lbl_true);
+				be_branch_if_false(self, uny->right, lbl_true);
 				be_instruction(self, I_BR, branch_to);
 
 				be_label(self, lbl_true);
@@ -670,7 +716,7 @@ namespace s22
 		{
 		case AST::LITERAL:			return be_literal(self, ast.as_lit);
 		case AST::SYMBOL:			return be_sym(self, ast.as_sym);
-		case AST::PROC_CALL: 		return backend_pcall(self, ast.as_pcall);
+		case AST::PROC_CALL: 		return be_proc_call(self, ast.as_pcall);
 		case AST::ARRAY_ACCESS: 	return be_array_access(self, ast.as_arr_access);
 
 		case AST::BINARY: {
@@ -683,7 +729,7 @@ namespace s22
 		case AST::UNARY: {
 			auto uny = ast.as_unary;
 			auto right = be_generate(self, uny->right);
-			return backend_unary(self, (INSTRUCTION_OP)uny->kind, right);
+			return be_unary(self, (INSTRUCTION_OP)uny->kind, right);
 		}
 
 		case AST::ASSIGN: {
@@ -713,15 +759,18 @@ namespace s22
 		case AST::DECL_PROC: {
 			auto proc = ast.as_decl_proc;
 
-			backend_push_stack_frame(self);
-			be_decl_proc(self, proc);
+			Label proc_lbl = {.type = Label::PROC, .text = proc->sym->id};
+			be_label(self, proc_lbl);
 
-			backend_block(self, proc->block);
+			be_push_stack_frame(self);
+			be_decl_proc(self, proc, proc_lbl);
 
-			backend_pop_stack_frame(self);
+			Label return_lbl = {.type = Label::END_PROC, .text = proc->sym->id};
+			be_block_no_stack_restore(self, proc->block);
 
-			// TODO: Return values on stack
-			// TODO: Return to end
+			be_label(self, return_lbl);
+			be_pop_stack_frame(self);
+
 			be_instruction(self, I_RET);
 
 			return {};
@@ -733,10 +782,10 @@ namespace s22
 			for (auto ifc = ast.as_if; ifc != nullptr; ifc = ifc->next)
 			{
 				Label end_if = { .type = Label::END_IF, .id = make_label_id() };
-				branch_if_false(self, ifc->cond, end_if);
+				be_branch_if_false(self, ifc->cond, end_if);
 				be_clear_reg_all(self);
 
-				backend_block(self, ifc->block);
+				be_block(self, ifc->block);
 
 				be_instruction(self, I_BR, end_all);
 				be_label(self, end_if);
@@ -756,17 +805,17 @@ namespace s22
 			{
 				Label end_case = { .type = Label::END_CASE, .id = make_label_id() };
 				case_ast.as_case = swc;
-				branch_if_false(self, case_ast, end_case);
+				be_branch_if_false(self, case_ast, end_case);
 				be_clear_reg_all(self);
 
-				backend_block(self, swc->block);
+				be_block(self, swc->block);
 
 				be_instruction(self, I_BR, end_switch);
 				be_label(self, end_case);
 			}
 
 			if (sw->case_default)
-				backend_block(self, sw->case_default);
+				be_block(self, sw->case_default);
 
 			be_label(self, end_switch);
 			return {};
@@ -780,10 +829,10 @@ namespace s22
 
 			be_label(self, begin_while);
 
-			branch_if_false(self, wh->cond, end_while);
+			be_branch_if_false(self, wh->cond, end_while);
 			be_clear_reg_all(self);
 
-			backend_block(self, wh->block);
+			be_block(self, wh->block);
 
 			be_instruction(self, I_BR, begin_while);
 
@@ -799,9 +848,9 @@ namespace s22
 
 			be_label(self, begin_do_while);
 
-			backend_block(self, do_wh->block);
+			be_block(self, do_wh->block);
 
-			branch_if_false(self, do_wh->cond, end_do_while);
+			be_branch_if_false(self, do_wh->cond, end_do_while);
 			be_clear_reg_all(self);
 
 			be_instruction(self, I_BR, begin_do_while);
@@ -821,11 +870,11 @@ namespace s22
 
 			// cond
 			be_label(self, begin_for);
-			branch_if_false(self, loop->cond, end_for);
+			be_branch_if_false(self, loop->cond, end_for);
 			be_clear_reg_all(self);
 
 			// block
-			backend_block(self, loop->block);
+			be_block(self, loop->block);
 
 			// post
 			be_generate(self, loop->post);
@@ -837,7 +886,21 @@ namespace s22
 		}
 
 		case AST::BLOCK: {
-			backend_block(self, ast.as_block);
+			be_block(self, ast.as_block);
+			return {};
+		}
+
+		case AST::RETURN: {
+			auto &ret = ast.as_return;
+			auto expr = be_generate(self, ret->expr);
+
+			Operand dst = {self->variables[ret->sym].address};
+			be_assign(self, I_MOV, dst, expr);
+			
+			Label return_lbl = {.type = Label::END_PROC, .text = ret->sym->id};
+			be_instruction(self, I_BR, return_lbl);
+
+			// BRANCH TO END
 			return {};
 		}
 
@@ -971,6 +1034,9 @@ struct std::formatter<s22::Label> : std::formatter<std::string>
 
 		case Label::PROC:
 			return format_to(ctx.out(), "{}", label.text);
+
+		case Label::END_PROC:
+			return format_to(ctx.out(), "{}$end", label.text);
 
 		default:
 			return ctx.out();

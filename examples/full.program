@@ -1,9 +1,7 @@
-x: int;
-if (!0)
+fn: proc(x: int, y: int) -> int
 {
-	x += 0;
+	z: int = x - y;
+	return z;
 }
-else
-{
-	x += 1;
-}
+
+fn(1, 2) + 5;

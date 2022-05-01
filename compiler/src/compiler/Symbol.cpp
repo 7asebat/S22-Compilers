@@ -89,7 +89,7 @@ namespace s22
 	push_entry(Scope *self)
 	{
 		if (self->table.empty())
-			self->table.reserve(256);
+			self->table.reserve(1024);
 
 		Scope::Entry entry = T{};
 		self->table.push_back(entry);
@@ -145,22 +145,23 @@ namespace s22
 		return parent;
 	}
 
-	Error
+	Result<Symbol *>
 	scope_return_is_valid(Scope *self, Symbol_Type type)
 	{
 		// Trace scope upwards until a function is found
 		for (auto scope = self; scope != nullptr; scope = scope->parent_scope)
 		{
-			if (scope->return_type_if_proc == false)
+			auto sym = scope->proc_sym;
+			if (sym == nullptr)
 				continue;
 
-			if (*scope->return_type_if_proc != type)
+			if (sym->type.procedure->return_type != type)
 			{
 				return Error{"type mismatch"};
 			}
 			else
 			{
-				return Error{}; // valid
+				return sym; // valid
 			}
 		}
 

@@ -92,28 +92,42 @@ namespace s22
 		return self;
 	}
 
-	void
+	Parse_Unit
 	Parser::return_value(Source_Location loc)
 	{
+		Parse_Unit self = {};
+
 		auto &ctx = this->context.top();
-		auto err = scope_return_is_valid(ctx.scope, SYMTYPE_VOID);
-		if (err)
+		if (auto [proc_sym, err] = scope_return_is_valid(ctx.scope, SYMTYPE_VOID); err)
 		{
 			parser_log(err, loc);
 		}
+		else
+		{
+			self.ast = ast_return(AST{}, proc_sym);
+		}
+
+		return self;
 	}
 
-	void
-	Parser::return_value(Source_Location loc, const Parse_Unit &unit)
+	Parse_Unit
+	Parser::return_value(Source_Location loc, const Parse_Unit &expr)
 	{
-		auto &ctx = this->context.top();
-		auto &expr = unit.semexpr;
-		auto err = scope_return_is_valid(ctx.scope, expr.type);
+		Parse_Unit self = {};
 
-		if (err && unit.err == false) // Limit error propagation
+		auto &ctx = this->context.top();
+
+		if (auto [proc_sym, err] = scope_return_is_valid(ctx.scope, expr.semexpr.type); err)
 		{
-			parser_log(err, unit.loc);
+			if (expr.err == false)  // Limit error propagation
+				parser_log(err, expr.loc);
 		}
+		else
+		{
+			self.ast = ast_return(expr.ast, proc_sym);
+		}
+
+		return self;
 	}
 
 	Parse_Unit
@@ -484,16 +498,16 @@ namespace s22
 			ctx.stack_offset -= size;
 		}
 
-		Symbol sym = { .id = id, .type = proc, .defined_at = loc };
-
-		auto [_, err] = scope_add_decl(ctx.scope->parent_scope, sym);
-		if (err)
+		Symbol symbol = { .id = id, .type = proc, .defined_at = loc };
+		if (auto [sym, err] = scope_add_decl(ctx.scope->parent_scope, symbol); err)
 		{
 			parser_log(err, loc);
 		}
-
-		// Add return type
-		ctx.scope->return_type_if_proc = ret;
+		else
+		{
+			// Add return type and symbol
+			ctx.scope->proc_sym = sym;
+		}
 	}
 
 	Parse_Unit

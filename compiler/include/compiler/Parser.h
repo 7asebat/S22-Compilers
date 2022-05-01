@@ -43,11 +43,11 @@ namespace s22
 		Parse_Unit
 		block_end();
 
-		void
+		Parse_Unit
 		return_value(Source_Location loc);
 
-		void
-		return_value(Source_Location loc, const Parse_Unit &unit);
+		Parse_Unit
+		return_value(Source_Location loc, const Parse_Unit &expr);
 
 		Parse_Unit
 		literal(Source_Location loc, Literal lit, Symbol_Type::BASE base);

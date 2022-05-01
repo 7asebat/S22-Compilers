@@ -19,6 +19,7 @@ namespace s22
 	struct Do_While_Loop;
 	struct For_Loop;
 	struct Block;
+	struct Return;
 
 	struct AST
 	{
@@ -39,6 +40,7 @@ namespace s22
 			FOR,
 
 			BLOCK,
+			RETURN,
 		};
 		KIND kind;
 
@@ -61,6 +63,7 @@ namespace s22
 			Do_While_Loop *as_do_while;
 			For_Loop *as_for;
 			Block *as_block;
+			Return *as_return;
 		};
 	};
 
@@ -221,4 +224,13 @@ namespace s22
 
 	AST
 	ast_block(const Buf<AST> &stmts, size_t used_stack_size = 0);
+
+	struct Return
+	{
+		AST expr;
+		Symbol *sym;
+	};
+
+	AST
+	ast_return(AST expr, Symbol *sym);
 }

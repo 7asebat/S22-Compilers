@@ -63,7 +63,7 @@
 %type <unit> decl_var decl_const decl_proc
 
 %printer { symtype_print(yyo, $$); } type
-%printer { fprintf(yyo, "%s", $$); } IDENTIFIER
+%printer { fprintf(yyo, "%s", $$.data); } IDENTIFIER
 
 // OPERATOR PRECEDENCE (LOWEST TO HIGHEST)
 %left L_OR
@@ -123,8 +123,8 @@ stmt:
 	| expr ';'
 
 	// Return values
-	| RETURN expr ';'   { p->return_value(@RETURN, $expr); }
-	| RETURN ';'        { p->return_value(@RETURN); }
+	| RETURN expr ';'   { $$ = p->return_value(@RETURN, $expr); }
+	| RETURN ';'        { $$ = p->return_value(@RETURN); }
 	;
 
 conditional:

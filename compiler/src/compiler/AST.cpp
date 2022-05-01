@@ -214,4 +214,17 @@ namespace s22
 
 		return self;
 	}
+
+	AST
+	ast_return(AST expr, Symbol *sym)
+	{
+		AST self = { .kind = AST::RETURN };
+
+		auto &ret = self.as_return;
+		ret = alloc<Return>();
+		ret->expr = expr;
+		ret->sym = sym;
+
+		return self;
+	}
 }

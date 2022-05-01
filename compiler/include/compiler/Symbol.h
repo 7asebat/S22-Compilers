@@ -97,7 +97,7 @@ namespace s22
 		Scope *parent_scope;
 		size_t idx_in_parent_table;
 
-		Optional<Symbol_Type> return_type_if_proc;
+		Symbol *proc_sym;
 	};
 
 	Result<Symbol *>
@@ -109,7 +109,7 @@ namespace s22
 	Scope *
 	scope_push(Scope *&self);
 
-	Error
+	Result<Symbol *>
 	scope_return_is_valid(Scope *self, Symbol_Type type);
 
 	Scope *

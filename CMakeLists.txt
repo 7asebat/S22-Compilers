@@ -2,11 +2,25 @@ cmake_minimum_required(VERSION 3.20)
 
 project(S22-Compilers LANGUAGES CXX)
 
+add_subdirectory(thirdparty/imgui-1.85)
+add_subdirectory(thirdparty/portable-file-dialogs-0.1.0)
+
+get_target_property(IMGUI_SOURCES imgui INTERFACE_SOURCES)
+get_target_property(IMGUI_INCLUDE_DIRS imgui INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(IMGUI_LINK_LIBS imgui INTERFACE_LINK_LIBRARIES)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include_directories(${CMAKE_SOURCE_DIR}/compiler/include)
+message("${IMGUI_INCLUDE_DIRS}")
+
+include_directories(
+	${CMAKE_SOURCE_DIR}/compiler/include
+	${IMGUI_INCLUDE_DIRS}
+)
+
+link_libraries(${IMGUI_LINK_LIBS} portable_file_dialogs)
 
 # Visual Studio hot reloading
 if (MSVC AND WIN32 AND NOT MSVC_VERSION VERSION_LESS 142)
@@ -36,6 +50,7 @@ set(COMPILER_SOURCE_FILES
 	compiler/src/compiler/Symbol.cpp
 	compiler/src/compiler/Semantic_Expr.cpp
 	compiler/src/compiler/Parser.cpp
+	compiler/src/compiler/Window.cpp
 	compiler/src/compiler/main.cpp
 )
 
@@ -46,6 +61,7 @@ set(COMPILER_HEADER_FILES
 	compiler/include/compiler/Symbol.h
 	compiler/include/compiler/Semantic_Expr.h
 	compiler/include/compiler/Parser.h
+	compiler/include/compiler/Window.h
 )
 
 # Main compiler
@@ -54,16 +70,5 @@ add_executable(compiler
 	${PARSER}
 	${COMPILER_SOURCE_FILES}
 	${COMPILER_HEADER_FILES}
-)
-
-# Run compiler
-add_custom_target(run
-	COMMAND compiler examples/full.program
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-# Debug compiler
-add_custom_target(debug
-	COMMAND compiler examples/full.program DEBUG
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+	${IMGUI_SOURCES}
 )

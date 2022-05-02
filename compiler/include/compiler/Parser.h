@@ -34,6 +34,12 @@ namespace s22
 		void
 		program_end();
 
+		Program
+		program_write();
+
+		void
+		dispose();
+
 		void
 		block_begin();
 

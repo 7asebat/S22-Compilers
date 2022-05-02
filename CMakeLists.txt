@@ -72,3 +72,8 @@ add_executable(compiler
 	${COMPILER_HEADER_FILES}
 	${IMGUI_SOURCES}
 )
+
+target_compile_definitions(compiler
+	PRIVATE
+		FONTS_DIR="${CMAKE_SOURCE_DIR}/thirdparty/fonts"
+)

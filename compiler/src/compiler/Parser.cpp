@@ -66,12 +66,29 @@ namespace s22
 		{
 			parser_log(Error{ "Complete!" }, Log_Level::INFO);
 			backend_compile(this->backend, ast);
-			backend_write(this->backend);
 		}
 		else
 		{
 			parser_log(Error{ "Complete with errors!" }, Log_Level::INFO);
 		}
+	}
+
+	Program
+	Parser::program_write()
+	{
+		return backend_write(this->backend);
+	}
+
+	void
+	Parser::dispose()
+	{
+		this->has_errors = false;
+		backend_dispose(this->backend);
+		this->global = {};
+		this->context = {};
+
+		auto mem = Memory_Log::instance();
+		mem->free_all();
 	}
 
 	void

@@ -10,21 +10,28 @@ namespace s22
 	struct Memory_Log
 	{
 		std::unordered_set<void *> log;
-		inline ~Memory_Log()
+
+		inline static Memory_Log *
+		instance() { static Memory_Log log = {}; return &log; }
+
+		inline void
+		free_all()
 		{
 			for (auto ptr : log)
 				free(ptr);
-		};
+			this->log.clear();
+		}
+		inline ~Memory_Log() { this->free_all(); };
 	};
 
 	template <typename T>
 	inline static T *
 	alloc(size_t count = 1)
 	{
-		static Memory_Log log = {};
+		auto mem = Memory_Log::instance();
 
 		auto ptr = (T*)calloc(count, sizeof(T));
-		log.log.insert(ptr);
+		mem->log.insert(ptr);
 
 		if (count == 1)
 			*ptr = T{};

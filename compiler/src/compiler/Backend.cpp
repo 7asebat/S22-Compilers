@@ -102,12 +102,12 @@ namespace s22
 	struct IBackend
 	{
 		bool is_used[RDX + 1];
-		bool has_errors;
 
 		std::unordered_map<const Symbol*, Operand> variables;
 		std::stack<size_t> stack_frame;
 
 		std::vector<Instruction> program;
+		size_t label_counter;
 	};
 
 	Operand
@@ -233,16 +233,15 @@ namespace s22
 	}
 
 	inline static size_t
-	make_label_id()
+	be_label_id(Backend self)
 	{
-		static size_t label_id = 0;
-		return label_id++;
+		return self->label_counter++;
 	}
 
 	inline static void
 	be_logical_and(Backend self, Instruction ins)
 	{
-		auto label_id = make_label_id();
+		auto label_id = be_label_id(self);
 		Label end_if  = { .type = Label::AND_FALSE, .id = label_id };
 		Label end_all = { .type = Label::END_AND,   .id = label_id };
 
@@ -269,7 +268,7 @@ namespace s22
 	{
 		// a = b || c
 		// a = !(!b && !c)
-		auto label_id = make_label_id();
+		auto label_id = be_label_id(self);
 		Label end_if  = { .type = Label::OR_TRUE, .id = label_id };
 		Label end_all = { .type = Label::END_OR,  .id = label_id };
 
@@ -294,7 +293,7 @@ namespace s22
 	inline static void
 	be_logical_not(Backend self, Instruction ins)
 	{
-		auto label_id = make_label_id();
+		auto label_id = be_label_id(self);
 		Label end_if  = { .type = Label::NOT_TRUE, .id = label_id };
 		Label end_all = { .type = Label::END_NOT,  .id = label_id };
 
@@ -317,7 +316,7 @@ namespace s22
 	inline static void
 	be_compare(Backend self, Instruction ins)
 	{
-		auto label_id = make_label_id();
+		auto label_id = be_label_id(self);
 		Label end_if  = { .type = Label::COND_FALSE, .id = label_id };
 		Label end_all = { .type = Label::END_COND, 	 .id = label_id };
 
@@ -633,7 +632,7 @@ namespace s22
 			{
 				Label lbl_true = {.type = Label::OR_TRUE, .id = branch_to.id};
 
-				Label left_is_false = {.type = Label::COND_FALSE, .id = make_label_id()};
+				Label left_is_false = {.type = Label::COND_FALSE, .id = be_label_id(self)};
 				be_branch_if_false(self, bin->left, left_is_false);
 				be_instruction(self, I_BR, lbl_true);
 
@@ -765,11 +764,11 @@ namespace s22
 		}
 
 		case AST::IF_COND: {
-			Label end_all = { .type = Label::END_ALL, .id = make_label_id() };
+			Label end_all = { .type = Label::END_ALL, .id = be_label_id(self) };
 
 			for (auto ifc = ast.as_if; ifc != nullptr; ifc = ifc->next)
 			{
-				Label end_if = { .type = Label::END_IF, .id = make_label_id() };
+				Label end_if = { .type = Label::END_IF, .id = be_label_id(self) };
 				be_branch_if_false(self, ifc->cond, end_if);
 				be_clear_reg_all(self);
 
@@ -784,13 +783,13 @@ namespace s22
 		}
 
 		case AST::SWITCH: {
-			Label end_switch = { .type = Label::END_SWITCH, .id = make_label_id() };
+			Label end_switch = { .type = Label::END_SWITCH, .id = be_label_id(self) };
 
 			auto sw = ast.as_switch;
 
 			for (auto &swc: sw->cases)
 			{
-				Label end_case = { .type = Label::END_CASE, .id = make_label_id() };
+				Label end_case = { .type = Label::END_CASE, .id = be_label_id(self) };
 				AST case_ast = { .kind = AST::SWITCH_CASE, .as_case = swc };
 				be_branch_if_false(self, case_ast, end_case);
 				be_clear_reg_all(self);
@@ -811,7 +810,7 @@ namespace s22
 		case AST::WHILE: {
 			auto wh = ast.as_while;
 
-			Label begin_while = { .type = Label::WHILE,     .id = make_label_id() };
+			Label begin_while = { .type = Label::WHILE,     .id = be_label_id(self) };
 			Label end_while   = { .type = Label::END_WHILE, .id = begin_while.id };
 
 			be_label(self, begin_while);
@@ -830,7 +829,7 @@ namespace s22
 		case AST::DO_WHILE: {
 			auto do_wh = ast.as_do_while;
 
-			Label begin_do_while = { .type = Label::WHILE,     .id = make_label_id() };
+			Label begin_do_while = { .type = Label::WHILE,     .id = be_label_id(self) };
 			Label end_do_while   = { .type = Label::END_WHILE, .id = begin_do_while.id };
 
 			be_label(self, begin_do_while);
@@ -849,7 +848,7 @@ namespace s22
 		case AST::FOR: {
 			auto loop = ast.as_for;
 
-			Label begin_for = { .type = Label::FOR,     .id = make_label_id() };
+			Label begin_for = { .type = Label::FOR,     .id = be_label_id(self) };
 			Label end_for   = { .type = Label::END_FOR, .id = begin_for.id };
 
 			// init
@@ -904,10 +903,43 @@ namespace s22
 	}
 
 	void
+	backend_dispose(Backend self)
+	{
+		be_clear_reg_all(self);
+
+		self->variables.clear();
+		self->stack_frame = {};
+
+		self->program = {};
+		self->label_counter = 0;
+	}
+
+	Program
 	backend_write(Backend self)
 	{
+		Program program = {};
 		for (const auto &ins : self->program)
-			std::cout << std::format("{}\n", ins);
+		{
+			auto &line = program.emplace_back(5);
+
+			if (ins.label.type != s22::Label::NONE)
+				line[0] = std::format("{}", ins.label);
+
+			if (ins.op != I_NOP)
+			{
+				line[1] = std::format("{}", ins.op);
+
+				if (ins.operand_count >= 1)
+					line[2] = std::format("{}", ins.dst);
+
+				if (ins.operand_count >= 2)
+					line[3] = std::format("{}", ins.src1);
+
+				if (ins.operand_count == 3)
+					line[4] = std::format("{}", ins.src2);
+			}
+		}
+		return program;
 	}
 
 	void
@@ -1028,16 +1060,13 @@ struct std::formatter<s22::Label> : std::formatter<std::string>
 };
 
 template <>
-struct std::formatter<s22::Instruction> : std::formatter<std::string>
+struct std::formatter<s22::INSTRUCTION_OP> : std::formatter<std::string>
 {
 	auto
-	format(s22::Instruction ins, format_context &ctx)
+	format(s22::INSTRUCTION_OP op, format_context &ctx)
 	{
-		if (ins.label.type != s22::Label::NONE)
-			format_to(ctx.out(), "{}: ", ins.label);
-
 		using namespace s22;
-		switch (ins.op)
+		switch (op)
 		{
 		case I_NOP: 	return ctx.out();
 		case I_MOV:		format_to(ctx.out(), "MOV"); 	break;
@@ -1076,6 +1105,20 @@ struct std::formatter<s22::Instruction> : std::formatter<std::string>
 		case I_RET:		format_to(ctx.out(), "RET"); 	break;
 		default: 		return ctx.out();
 		}
+		return ctx.out();
+	}
+};
+
+template <>
+struct std::formatter<s22::Instruction> : std::formatter<std::string>
+{
+	auto
+	format(s22::Instruction ins, format_context &ctx)
+	{
+		if (ins.label.type != s22::Label::NONE)
+			format_to(ctx.out(), "{}: ", ins.label);
+
+		format_to(ctx.out(), "{}", ins.op);
 
 		if (ins.operand_count >= 1)
 			format_to(ctx.out(), " {}", ins.dst);

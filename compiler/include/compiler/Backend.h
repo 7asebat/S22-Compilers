@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+#include <string>
 
 namespace s22
 {
@@ -37,6 +39,11 @@ namespace s22
 	backend_instance();
 
 	void
+	backend_dispose(Backend self);
+
+	using Program = std::vector<std::vector<std::string>>;
+
+	Program
 	backend_write(Backend self);
 
 	void

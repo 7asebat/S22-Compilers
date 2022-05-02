@@ -102,15 +102,23 @@ bool     return BOOL;
 [ \t]+       ; /* skip whitespace */
 {line}       ; /* skip lines */
 
-.            yyerror(yylloc, nullptr, "Unexpected character"); /* Any other character */
+.            yyerror(yylloc, nullptr, "unexpected character"); /* Any other character */
 %%
 
-void
-s22::lexer_flush_buffer()
+YY_BUFFER_STATE
+s22::lexer_scan_buffer(char *buf, size_t buf_size)
 {
     // Reset global line number
 	yylineno = 1;
     yycolno = 1;
 
-    YY_FLUSH_BUFFER;
+    // Start new buffer
+    return yy_scan_string(buf);
+    // return yy_scan_buffer(buf, buf_size); // This apparently causes issues and changes the underlying buffer
+}
+
+void
+s22::lexer_delete_buffer(YY_BUFFER_STATE buf)
+{
+    yy_delete_buffer(buf);
 }

@@ -8,11 +8,24 @@
 #include <stack>
 #include <unordered_set>
 
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
+
 namespace s22
 {
-	// Defined in the Lexer
+	// Defined in Lexer.l
+	// Scan a null-terminated in-memory buffer
+	YY_BUFFER_STATE
+	lexer_scan_buffer(char *buf, size_t buf_size);
+	
+	// Cleanup allocated buffer
 	void
-	lexer_flush_buffer();
+	lexer_delete_buffer(YY_BUFFER_STATE buf);
+
+	struct Source_Code
+	{
+		char buf[1 << 13 + 2];// 8KB + 2 needed by flex
+		size_t count;
+	};
 
 	struct Parse_Unit
 	{
@@ -169,7 +182,10 @@ namespace s22
 		std::stack<Context> context;
 		Scope global;
 		Backend backend;
+		
+		// UI elements
 		std::vector<std::string> logs;
+		Source_Code source_code;
 		bool has_errors;
 	};
 

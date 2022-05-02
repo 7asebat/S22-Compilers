@@ -7,7 +7,6 @@ extern int yylineno;
 extern int yycolno;
 extern int yyleng;
 extern char *yytext;
-extern FILE *yyin;
 
 namespace s22
 {
@@ -82,6 +81,9 @@ namespace s22
 	Program
 	Parser::program_write()
 	{
+		if (this->has_errors)
+			return {};
+
 		return backend_write(this->backend);
 	}
 
@@ -752,10 +754,13 @@ namespace s22
 	}
 }
 
+
 void
 yyerror(const s22::Source_Location *location, s22::Parser *p, const char *message)
 {
 	auto parser = s22::parser_instance();
+	auto &source_code = parser->source_code;
+
 	if (*location == s22::Source_Location{})
 	{
 		parser->logs.push_back(std::string{message});
@@ -766,22 +771,30 @@ yyerror(const s22::Source_Location *location, s22::Parser *p, const char *messag
 		parser->logs.push_back(std::format("({}) {}", location->last_line, message));
 	}
 
-	// Save offset to continue read
-	auto offset_before = ftell(yyin);
-	rewind(yyin);
-
 	// Read file line by line into buffer
-	char buf[1024] = {};
+	char buf[1024 + 1] = {};
 	size_t lines_to_read = location->first_line;
+	size_t position_in_source_code = 0;
+	
 	while (lines_to_read > 0)
 	{
-		fgets(buf, 1024, yyin);
-		buf[strlen(buf) - 1] = '\0';
-
+		size_t i = 0;
+		for (; i + 1 < sizeof(buf) && position_in_source_code < source_code.count; i++)
+		{
+			char c = source_code.buf[position_in_source_code++];
+			if (c == '\n')
+			{
+				break;
+			}
+			else
+			{
+				buf[i] = c;
+			}
+		}
+		
+		buf[i] = '\0';
 		lines_to_read--;
 	}
-	// Continue read
-	fseek(yyin, offset_before, SEEK_SET);
 
 	// Log error
 	parser->logs.push_back(std::string{buf});

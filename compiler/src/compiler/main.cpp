@@ -14,49 +14,79 @@ yyparse(s22::Parser *);
 namespace s22
 {
 	constexpr auto COMPILER_WINDOW_TITLE = "Compiler";
+	constexpr auto SOURCE_CODE_WINDOW_TITLE = "Source Code";
 	constexpr auto LOGS_WINDOW_TITLE = "Logs";
+
+	constexpr ImGuiWindowFlags WINDOW_FLAGS = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 
 	inline static void
 	compiler_window()
 	{
 		s22_defer { ImGui::End(); };
-		if (ImGui::Begin(COMPILER_WINDOW_TITLE) == false)
+		if (ImGui::Begin(COMPILER_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
 			return;
+		
+		auto parser = s22::parser_instance();
+		auto &source_code = parser->source_code;
 
 		static char filepath[1024] = {};
-		ImGui::Text("%s", filepath);
+		if (filepath[0] == '\0')
+		{
+			ImGui::Text("No file selected");
+		}
+		else
+		{
+			ImGui::Text("File: %s", filepath);
+		}
 
 		if (ImGui::Button("Browse"))
 		{
-			auto files = pfd::open_file("Browse me").result();
+			auto files = pfd::open_file("Open file").result();
 			if (files.empty() == false)
 				strcpy_s(filepath, files[0].c_str());
+
+			FILE *f = fopen(filepath, "r");
+			s22_defer { fclose(f); };
+
+			// Get file size
+			fseek(f, 0, SEEK_END);
+			size_t fsize = ftell(f);
+			rewind(f);
+
+			if (fsize + 2 > sizeof(source_code.buf))
+			{
+				parser_log(Error{"file too large; max file size is 8KB"});
+			}
+			else
+			{
+				memset(&source_code, 0, sizeof(source_code));
+				fread(source_code.buf, fsize, 1, f);
+				source_code.count = fsize;
+			}
 		}
 
 		static bool debug_enabled = false;
-		ImGui::SameLine(); ImGui::Checkbox("Debug", &debug_enabled);
-
+		
 		static s22::Program program = {};
 		if (ImGui::Button("Compile"))
 		{
-			auto parser = s22::parser_instance();
-			parser->dispose();
-		
-			// Input stream, open first argument as a file
-			fopen_s(&yyin, filepath, "r");
-			if (yyin == nullptr)
+			auto lexer_buf = lexer_scan_buffer(source_code.buf, source_code.count + 2);
+			if (lexer_buf == nullptr)
+			{
+				parser_log(Error{"lexer buffer is nullptr"});
 				return;
-			lexer_flush_buffer();
-
-			yydebug = debug_enabled ? 1 : 0;
+			}
+			s22_defer { lexer_delete_buffer(lexer_buf); };
 
 			// Run parser
+			yydebug = debug_enabled ? 1 : 0;
 			yyparse(parser);
+			s22_defer { parser->dispose(); };
 
 			program = parser->program_write();
-
-			fclose(yyin);
 		}
+		ImGui::SameLine();
+		ImGui::Checkbox("Debug", &debug_enabled);
 
 		if (program.empty())
 			return;
@@ -81,10 +111,29 @@ namespace s22
 	}
 
 	inline static void
+	source_code_window()
+	{
+		s22_defer { ImGui::End(); };
+		if (ImGui::Begin(SOURCE_CODE_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
+			return;
+
+		auto &source_code = parser_instance()->source_code;
+		ImGui::InputTextMultiline(
+			"##Source_Code", source_code.buf, sizeof(source_code.buf), ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_CallbackEdit,
+			[](ImGuiInputTextCallbackData* data) -> int {
+				auto scode = (Source_Code *)data->UserData;
+				scode->count = data->BufTextLen;
+				return 0;
+			},
+			(void*)&source_code
+		);
+	}
+
+	inline static void
 	logs_window()
 	{
 		s22_defer { ImGui::End(); };
-		if (ImGui::Begin(LOGS_WINDOW_TITLE) == false)
+		if (ImGui::Begin(LOGS_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
 			return;
 
 		ImGui::PushFont(IMGUI_FONT_MONO);
@@ -128,14 +177,18 @@ namespace s22
 			ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
 			ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->WorkSize);
 
-			auto dockspace_top = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.7f, nullptr, &dockspace_id);
+			auto dockspace_top_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.7f, nullptr, &dockspace_id);
+			auto dockspace_top_right = ImGui::DockBuilderSplitNode(dockspace_top_left, ImGuiDir_Right, 0.5f, nullptr, &dockspace_top_left);
+
 			auto dockspace_bot = dockspace_id;
 
-			ImGui::DockBuilderDockWindow(COMPILER_WINDOW_TITLE, dockspace_top);
+			ImGui::DockBuilderDockWindow(SOURCE_CODE_WINDOW_TITLE, dockspace_top_left);
+			ImGui::DockBuilderDockWindow(COMPILER_WINDOW_TITLE, dockspace_top_right);
 			ImGui::DockBuilderDockWindow(LOGS_WINDOW_TITLE, dockspace_bot);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
+		source_code_window();
 		compiler_window();
 		logs_window();
 

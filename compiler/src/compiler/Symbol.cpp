@@ -6,61 +6,8 @@
 #include <stdio.h>
 #include <format>
 
-extern int yylineno;
-extern int yyleng;
-extern char *yytext;
-extern FILE *yyin;
-
 namespace s22
 {
-	void
-	location_reduce(Source_Location &current, Source_Location *rhs, size_t N)
-	{
-		if (N != 0)
-		{
-			current.first_line = rhs[1].first_line;
-			current.first_column = rhs[1].first_column;
-			current.last_line = rhs[N].last_line;
-			current.last_column = rhs[N].last_column;
-		}
-		else
-		{
-			current.first_line = current.last_line = rhs[0].last_line;
-			current.first_column = current.last_column = rhs[0].last_column;
-		}
-	}
-
-	void
-	location_update(Source_Location *loc)
-	{
-		static int column = 1;
-
-		// New line
-		if (yytext[yyleng - 1] == '\n')
-		{
-			column = 1;
-			return;
-		}
-
-		// Current line and column
-		loc->first_line = yylineno;
-		loc->first_column = column;
-
-		// Next line and column
-		loc->last_line = yylineno;
-		loc->last_column = loc->first_column + yyleng - 1;
-
-		// Update current column
-		column = loc->last_column + 1;
-	}
-
-	void
-	location_print(FILE *out, const Source_Location *const loc)
-	{
-		auto str = std::format("{}", *loc);
-		fprintf(out, "%s", str.data());
-	}
-
 	bool
 	symtype_allows_arithmetic(const Symbol_Type &type)
 	{
@@ -218,6 +165,7 @@ namespace s22
 		for (size_t i = 0; i < proc.parameters.count; i++)
 		{
 			auto &param = std::get<Symbol>(self->table[i]);
+			param.is_set = true;
 			proc.parameters[i] = param.type;
 		}
 

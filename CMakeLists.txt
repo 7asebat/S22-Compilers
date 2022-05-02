@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(S22-Compilers LANGUAGES CXX)
 
-add_subdirectory(thirdparty/imgui-1.85)
+add_subdirectory(thirdparty/imgui)
 add_subdirectory(thirdparty/portable-file-dialogs-0.1.0)
 
 get_target_property(IMGUI_SOURCES imgui INTERFACE_SOURCES)

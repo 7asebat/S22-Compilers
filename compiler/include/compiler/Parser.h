@@ -10,6 +10,10 @@
 
 namespace s22
 {
+	// Defined in the Lexer
+	void
+	lexer_flush_buffer();
+
 	struct Parse_Unit
 	{
 		Semantic_Expr semexpr;
@@ -165,6 +169,7 @@ namespace s22
 		std::stack<Context> context;
 		Scope global;
 		Backend backend;
+		std::vector<std::string> logs;
 		bool has_errors;
 	};
 
@@ -180,10 +185,10 @@ namespace s22
 	parser_instance();
 
 	void
-	parser_log(const Error &err, Log_Level lvl = Log_Level::INFO);
+	parser_log(const Error &err, Log_Level lvl = Log_Level::ERROR);
 
 	void
-	parser_log(const Error &err, Source_Location loc, Log_Level lvl = Log_Level::INFO);
+	parser_log(const Error &err, Source_Location loc, Log_Level lvl = Log_Level::ERROR);
 }
 
 void

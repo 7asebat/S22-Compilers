@@ -4,6 +4,7 @@
     #include "Parser.hpp"  // Token definitions
 
     // Call location_update before each token is processed
+    int yycolno = 1;
     #define YY_USER_ACTION location_update(yylloc);
 %}
 
@@ -103,3 +104,13 @@ bool     return BOOL;
 
 .            yyerror(yylloc, nullptr, "Unexpected character"); /* Any other character */
 %%
+
+void
+s22::lexer_flush_buffer()
+{
+    // Reset global line number
+	yylineno = 1;
+    yycolno = 1;
+
+    YY_FLUSH_BUFFER;
+}

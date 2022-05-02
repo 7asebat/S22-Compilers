@@ -1,7 +1,13 @@
 #pragma once
 
 #include "compiler/Parser.h"
-#include <unordered_map>
+
+// Bison variables
+extern int yylineno;
+extern int yycolno;
+extern int yyleng;
+extern char *yytext;
+extern FILE *yyin;
 
 namespace s22
 {
@@ -684,12 +690,12 @@ namespace s22
 	parser_log(const Error &err, Source_Location loc, Log_Level lvl)
 	{
 		auto parser = parser_instance();
-		if (lvl == Log_Level::ERROR)
+		if (lvl != Log_Level::INFO)
 			parser->has_errors = true;
 
-		// Fill with loc if error has none
 		auto msg = std::format("{}: {}", lvl, err);
-
+		
+		// Fill with loc if error has none
 		if (err.loc != Source_Location{})
 			loc = err.loc;
 
@@ -699,16 +705,67 @@ namespace s22
 			exit(-1);
 	}
 
-}
+	void
+	location_reduce(Source_Location &current, Source_Location *rhs, size_t N)
+	{
+		if (N != 0)
+		{
+			current.first_line = rhs[1].first_line;
+			current.first_column = rhs[1].first_column;
+			current.last_line = rhs[N].last_line;
+			current.last_column = rhs[N].last_column;
+		}
+		else
+		{
+			current.first_line = current.last_line = rhs[0].last_line;
+			current.first_column = current.last_column = rhs[0].last_column;
+		}
+	}
 
-extern int yylineno;
-extern int yyleng;
-extern char *yytext;
-extern FILE *yyin;
+	void
+	location_update(Source_Location *loc)
+	{
+		// New line
+		if (yytext[yyleng - 1] == '\n')
+		{
+			yycolno = 1;
+			return;
+		}
+
+		// Current line and yycolno
+		loc->first_line = yylineno;
+		loc->first_column = yycolno;
+
+		// Next line and column
+		loc->last_line = yylineno;
+		loc->last_column = loc->first_column + yyleng - 1;
+
+		// Update current column
+		yycolno = loc->last_column + 1;
+	}
+
+	void
+	location_print(FILE *out, const Source_Location *const loc)
+	{
+		auto str = std::format("{}", *loc);
+		fprintf(out, "%s", str.data());
+	}
+}
 
 void
 yyerror(const s22::Source_Location *location, s22::Parser *p, const char *message)
 {
+	auto parser = s22::parser_instance();
+	if (*location == s22::Source_Location{})
+	{
+		parser->logs.push_back(std::string{message});
+		return;
+	}
+	else
+	{
+		parser->logs.push_back(std::format("({}) {}", location->last_line, message));
+	}
+
 	// Save offset to continue read
 	auto offset_before = ftell(yyin);
 	rewind(yyin);
@@ -726,9 +783,8 @@ yyerror(const s22::Source_Location *location, s22::Parser *p, const char *messag
 	// Continue read
 	fseek(yyin, offset_before, SEEK_SET);
 
-	// Print error
-	fprintf(stderr, "(%d) %s\n", location->last_line, message);
-	fprintf(stderr, "%s\n", buf);
+	// Log error
+	parser->logs.push_back(std::string{buf});
 
 	// Print indicator
 	for (size_t i = 0; i < strlen(buf); i++)
@@ -739,7 +795,7 @@ yyerror(const s22::Source_Location *location, s22::Parser *p, const char *messag
 		else if (isspace(buf[i]) == false)
 			buf[i] = ' ';
 	}
-	fprintf(stderr, "%s\n", buf);
+	parser->logs.push_back(std::string{buf});
 }
 
 template <>

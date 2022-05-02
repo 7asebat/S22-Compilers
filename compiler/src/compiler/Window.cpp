@@ -1,6 +1,7 @@
 #include "compiler/Window.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 #include <d3d11.h>
@@ -54,6 +55,7 @@ namespace s22
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 		ImGuiIO &io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 		// Setup Dear ImGui style
 		ImGui::StyleColorsDark();
@@ -63,7 +65,8 @@ namespace s22
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
 		//io.Fonts->AddFontDefault();
-		io.Fonts->AddFontFromFileTTF(FONTS_DIR "/DroidSans.ttf", 16.0f);
+		IMGUI_FONT_MONO = io.Fonts->AddFontFromFileTTF(FONTS_DIR "/CascadiaMono.ttf", 16.0f);
+		IMGUI_FONT_SANS = io.Fonts->AddFontFromFileTTF(FONTS_DIR "/DroidSans.ttf", 16.0f);
 
 		wnd.handle = hwnd;
 		wnd.window_class = wc;
@@ -133,15 +136,28 @@ namespace s22
 
 			window_frame_start();
 
+			
 			const auto viewport = ImGui::GetMainViewport();
 			ImGui::SetNextWindowPos(viewport->WorkPos);
 			ImGui::SetNextWindowSize(viewport->WorkSize);
 
-			if (ImGui::Begin("Root Window", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
-			{
-				if (frame() == false)
-					done = true;
-			}
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+			constexpr ImGuiWindowFlags FLAGS = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar
+				| ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+				| ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground;
+
+			ImGui::Begin("DOCKSPACE Window", nullptr, FLAGS);
+			ImGui::PopStyleVar(3);
+
+			auto dockspace_id = ImGui::GetID(IMGUI_DOCKSPACE_ID);
+			ImGui::DockSpace(dockspace_id, ImVec2{}, ImGuiDockNodeFlags_PassthruCentralNode);
+
+			if (frame() == false)
+				done = true;
+
 			ImGui::End();
 			window_frame_render();
 		}

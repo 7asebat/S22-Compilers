@@ -292,6 +292,20 @@ namespace s22
 		inline T
 		operator |(const T& other) { return bool(*this) ? *data : other; }
 	};
+
+	template <typename F>
+	struct Defer
+	{
+		F f;
+		Defer(F f) : f(f) {}
+		~Defer() { f(); }
+	};
+
+	#define s22_DEFER_1(x, y) x##y
+	#define s22_DEFER_2(x, y) s22_DEFER_1(x, y)
+	#define s22_DEFER_3(x)    s22_DEFER_2(x, __COUNTER__)
+
+	#define s22_defer s22::Defer s22_DEFER_3(_defer_) = [&]()
 }
 
 template<>

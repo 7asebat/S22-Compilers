@@ -905,6 +905,9 @@ namespace s22
 	void
 	backend_dispose(Backend self)
 	{
+		if (self == nullptr)
+			return;
+
 		be_clear_reg_all(self);
 
 		self->variables.clear();

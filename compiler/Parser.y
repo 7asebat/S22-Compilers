@@ -1,7 +1,8 @@
-// Top level code
 %code top {
-	#include <stdio.h>	// printf
+	#include <stdio.h>  // printf
 }
+
+%require "3.8"
 
 // Required for token union definition
 %code requires {
@@ -30,7 +31,7 @@
 
 // Enable debugging
 %define parse.trace
-%define parse.error verbose
+%define parse.error custom
 
 // TOKENS
 /// Keywords
@@ -229,8 +230,8 @@ decl_proc_params:
 	;
 
 decl_proc_params_list:
-	decl_proc_params_list ',' decl_var			{ p->decl_proc_params_add($decl_var); }
-	| decl_var									{ p->decl_proc_params_add($decl_var); }
+	decl_proc_params_list ',' decl_var          { p->decl_proc_params_add($decl_var); }
+	| decl_var                                  { p->decl_proc_params_add($decl_var); }
 	;
 
 // return ?
@@ -240,10 +241,10 @@ decl_proc_return:
 	;
 
 type:
-	INT 	{ $$ = { .base = Symbol_Type::INT }; }
-	| UINT 	{ $$ = { .base = Symbol_Type::UINT }; }
+	INT     { $$ = { .base = Symbol_Type::INT }; }
+	| UINT  { $$ = { .base = Symbol_Type::UINT }; }
 	| FLOAT { $$ = { .base = Symbol_Type::FLOAT }; }
-	| BOOL 	{ $$ = { .base = Symbol_Type::BOOL }; }
+	| BOOL  { $$ = { .base = Symbol_Type::BOOL }; }
 	;
 
 assignment:
@@ -342,3 +343,46 @@ array_access:
 	;
 
 %%
+
+inline static int
+yyreport_syntax_error(const yypcontext_t *ctx, s22::Parser *parser)
+{
+	int res = 0;
+	auto loc = yypcontext_location(ctx);
+
+	if (auto lookahead = yypcontext_token(ctx); lookahead != YYSYMBOL_YYEMPTY)
+	{
+		auto msg = std::format("unexpected {}", yysymbol_name(lookahead));
+
+		constexpr auto TOKEN_MAX = 5;
+		yysymbol_kind_t expected[TOKEN_MAX];
+
+		int num_expected = yypcontext_expected_tokens(ctx, expected, TOKEN_MAX);
+		if (num_expected < 0)
+		{
+			res = num_expected;
+		}
+		else
+		{
+			if (num_expected == 0)
+				num_expected = TOKEN_MAX;
+
+			for (int i = 0; i < num_expected; i++)
+			{
+				if (i == 0)
+				{
+					msg += std::format(", expected {}", yysymbol_name(expected[i]));
+				}
+				else
+				{
+					msg += std::format(" or {}", yysymbol_name(expected[i]));
+				}
+			}
+
+
+			s22::parser_log(Error{*loc, "{}", msg}, s22::Log_Level::ERROR);
+		}
+	}
+
+	return res;
+}

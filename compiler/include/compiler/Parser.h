@@ -55,7 +55,7 @@ namespace s22
 		void
 		program_end();
 
-		Program
+		UI_Program
 		program_write();
 
 		void

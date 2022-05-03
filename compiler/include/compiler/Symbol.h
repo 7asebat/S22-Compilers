@@ -28,7 +28,7 @@ namespace s22
 		std::vector<Entry> table;
 
 		Scope *parent_scope;
-		size_t idx_in_parent_table; // index of current scope in the parent scope, used to track use before declaration
+		size_t idx_in_parent_table; // index of current scope in the parent scope, used to track use before declaration in upper scopes
 
 		Symbol *proc_sym; // if scope is a procedure, holds the symbol to it
 	};
@@ -42,6 +42,15 @@ namespace s22
 	// Fails on type mismatch, or assignment error
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol, const Parse_Unit &expr);
+
+	// Declare procedure in this scope's parent
+	// Pops the scope, replacing it with its parent
+	Result<Symbol *>
+	scope_add_decl_proc(Scope *&self, const Symbol &symbol);
+
+	// Builds a procedure, sets its arguments to all variables defined so far in the scope
+	Procedure
+	scope_make_proc(Scope *self, Semantic_Expr return_type);
 
 	// Push new scope, modifying the passed pointer and returning the old pointer
 	Scope *
@@ -59,7 +68,26 @@ namespace s22
 	Symbol *
 	scope_get_sym(Scope *self, const char *id);
 
-	// Builds a procedure, sets its arguments to all variables defined so far in the scope
-	Procedure
-	scope_make_proc(Scope *self, Semantic_Expr return_type);
+	// sub-block, symbol_id, symbol_type, symbol_location, symbol flags
+	using UI_Symbol_Row = std::array<std::string, 4>;
+	// row
+	// scope closed
+	// scope open
+	struct UI_Symbol_Table;
+
+	using UI_Symbol_Table_Entry = std::variant<
+	    UI_Symbol_Row,
+		const Scope *,
+		UI_Symbol_Table
+	>;
+
+	struct UI_Symbol_Table
+	{
+		const Scope *scope;
+		std::vector<UI_Symbol_Table_Entry> table;
+		inline std::vector<UI_Symbol_Table_Entry>* operator->() { return &table; }
+	};
+
+	UI_Symbol_Table
+	scope_get_ui_table(const Scope *self);
 }

@@ -165,8 +165,8 @@ namespace s22
 		case I_LOG_GT:	return I_LOG_LEQ;
 		case I_LOG_GEQ:	return I_LOG_LT;
 
-		default: // unreachable
-			parser_log(Error{"UNREACHABLE"}, Log_Level::CRITICAL);
+		default:
+			s22_unreachable_msg("unrecognized op");
 			return I_BR;
 		}
 	}
@@ -911,17 +911,17 @@ namespace s22
 
 		be_clear_reg_all(self);
 
-		self->variables.clear();
+		self->variables = {};
 		self->stack_frame = {};
 
 		self->program = {};
 		self->label_counter = 0;
 	}
 
-	Program
-	backend_write(Backend self)
+	UI_Program
+	backend_get_ui_program(Backend self)
 	{
-		Program program = {};
+		UI_Program program = {};
 		for (const auto &ins : self->program)
 		{
 			auto &line = program.emplace_back();

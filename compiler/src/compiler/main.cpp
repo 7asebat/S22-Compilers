@@ -15,9 +15,13 @@ namespace s22
 {
 	constexpr auto COMPILER_WINDOW_TITLE = "Compiler";
 	constexpr auto SOURCE_CODE_WINDOW_TITLE = "Source Code";
+	constexpr auto SYMBOL_TABLE_WINDOW_TITLE = "Symbol Table";
 	constexpr auto LOGS_WINDOW_TITLE = "Logs";
 
 	constexpr ImGuiWindowFlags WINDOW_FLAGS = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+
+	inline static s22::UI_Program ui_program = {};
+	inline static s22::UI_Symbol_Table ui_table = {};
 
 	inline static void
 	compiler_window()
@@ -68,9 +72,9 @@ namespace s22
 
 		static bool debug_enabled = false;
 		
-		static s22::Program program = {};
 		if (ImGui::Button("Compile"))
 		{
+
 			auto lexer_buf = lexer_scan_buffer(source_code.buf, source_code.count + 2);
 			if (lexer_buf == nullptr)
 			{
@@ -79,17 +83,26 @@ namespace s22
 			}
 			s22_defer { lexer_delete_buffer(lexer_buf); };
 
-			// Run parser
+			// Discard old data, run parser;
 			yydebug = debug_enabled ? 1 : 0;
+			parser->dispose();
 			yyparse(parser);
-			s22_defer { parser->dispose(); };
 
-			program = parser->program_write();
+			if (parser->has_errors == false)
+			{
+				ui_program = parser->program_write();
+				ui_table = scope_get_ui_table(&parser->global);
+			}
+			else
+			{
+				ui_program = {};
+				ui_table = {};
+			}
 		}
 		ImGui::SameLine();
 		ImGui::Checkbox("Debug", &debug_enabled);
 
-		if (program.empty())
+		if (ui_program.empty())
 			return;
 
 		if (ImGui::BeginTable("Quadruples", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
@@ -100,7 +113,7 @@ namespace s22
 			ImGui::TableSetupColumn("Label"); ImGui::TableSetupColumn("Instruction"); ImGui::TableSetupColumn("dst"); ImGui::TableSetupColumn("src1"); ImGui::TableSetupColumn("src2");
 			ImGui::TableHeadersRow();
 
-			for (const auto &instruction : program)
+			for (const auto &instruction : ui_program)
 			{
 				for (const auto &part : instruction)
 				{
@@ -120,7 +133,9 @@ namespace s22
 
 		auto &source_code = parser_instance()->source_code;
 		ImGui::InputTextMultiline(
-			"##Source_Code", source_code.buf, sizeof(source_code.buf), ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_CallbackEdit,
+			"##Source_Code",
+			source_code.buf, sizeof(source_code.buf),
+			ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_CallbackEdit | ImGuiInputTextFlags_AllowTabInput,
 			[](ImGuiInputTextCallbackData* data) -> int {
 				auto scode = (Source_Code *)data->UserData;
 				scode->count = data->BufTextLen;
@@ -128,6 +143,83 @@ namespace s22
 			},
 			(void*)&source_code
 		);
+	}
+
+	inline static void
+	symbol_table_build(UI_Symbol_Table &table, size_t depth)
+	{
+		for (size_t i = 0; i < table->size(); i++)
+		{
+			auto &row = table.table[i];
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			if (depth == 0)
+			{
+				ImGui::Text("|");
+			}
+			else
+			{
+				ImGui::Text("|%s", std::string(depth, '>').c_str());
+			}
+
+			if (std::holds_alternative<UI_Symbol_Row>(row))
+			{
+				for (const auto &cell : std::get<UI_Symbol_Row>(row))
+				{
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", cell.c_str());
+				}
+			}
+			else if (std::holds_alternative<const Scope*>(row))
+			{
+				auto label = std::format("expand##{}-{}", (void*)table.scope, i);
+
+				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str())) // Inner table
+				{
+					row = scope_get_ui_table(std::get<const Scope*>(row));
+				}
+			}
+			else
+			{
+				auto label = std::format("collapse##{}-{}", (void*)table.scope, i);
+
+				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str())) // Inner table
+				{
+					auto &table = std::get<UI_Symbol_Table>(row);
+					row = table.scope;
+				}
+				else
+				{
+					symbol_table_build(std::get<UI_Symbol_Table>(row), depth+1);
+				}
+			}
+		}
+	}
+
+	inline static void
+	symbol_table_window()
+	{
+		s22_defer { ImGui::End(); };
+		if (ImGui::Begin(SYMBOL_TABLE_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
+			return;
+
+		if (ui_table->empty())
+		{
+			ImGui::Text("Nothing to show...");
+			return;
+		}
+
+		if (ImGui::BeginTable("Symbol Table", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
+		{
+			s22_defer { ImGui::EndTable(); };
+
+			ImGui::TableSetupScrollFreeze(1, 1);
+			ImGui::TableSetupColumn("Scope"); ImGui::TableSetupColumn("Symbol ID"); ImGui::TableSetupColumn("Type"); ImGui::TableSetupColumn("Location"); ImGui::TableSetupColumn("Constant/Initialized/Used");
+			ImGui::TableHeadersRow();
+
+			symbol_table_build(ui_table, 0);
+		}
 	}
 
 	inline static void
@@ -185,12 +277,14 @@ namespace s22
 
 			ImGui::DockBuilderDockWindow(SOURCE_CODE_WINDOW_TITLE, dockspace_top_left);
 			ImGui::DockBuilderDockWindow(COMPILER_WINDOW_TITLE, dockspace_top_right);
+			ImGui::DockBuilderDockWindow(SYMBOL_TABLE_WINDOW_TITLE, dockspace_top_right);
 			ImGui::DockBuilderDockWindow(LOGS_WINDOW_TITLE, dockspace_bot);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
 		source_code_window();
 		compiler_window();
+		symbol_table_window();
 		logs_window();
 
 		return true;

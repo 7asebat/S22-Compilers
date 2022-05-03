@@ -45,6 +45,27 @@ namespace s22
 		return inner_ctx;
 	}
 
+	inline static Parser::Context&
+	ctx_push_no_scope(std::stack<Parser::Context> &ctx)
+	{
+		if (ctx.empty())
+			return ctx.emplace();
+
+		auto &parent = ctx.top();
+
+		auto &inner_ctx = ctx.emplace();
+		inner_ctx.scope = parent.scope;
+		return inner_ctx;
+	}
+
+	inline static Parser::Context
+	ctx_pop_no_scope(std::stack<Parser::Context> &ctx)
+	{
+		auto inner_ctx = std::move(ctx.top());
+		ctx.pop();
+		return inner_ctx;
+	}
+
 	void
 	Parser::program_begin()
 	{
@@ -77,13 +98,10 @@ namespace s22
 		}
 	}
 
-	Program
+	UI_Program
 	Parser::program_write()
 	{
-		if (this->has_errors)
-			return {};
-
-		return backend_write(this->backend);
+		return backend_get_ui_program(this->backend);
 	}
 
 	void
@@ -343,7 +361,8 @@ namespace s22
 	void
 	Parser::pcall_begin()
 	{
-		auto &ctx = ctx_push(this->context);
+		// Add context for function arguments
+		ctx_push_no_scope(this->context);
 	}
 
 	void
@@ -357,8 +376,9 @@ namespace s22
 	Parser::pcall(Source_Location loc, const String &id)
 	{
 		Parse_Unit self = {.loc = loc};
-		
-		auto ctx = ctx_pop(this->context);
+
+		auto ctx = ctx_pop_no_scope(this->context);
+
 		auto params = Buf<Parse_Unit>::view(ctx.proc_call_arguments);
 
 		if (auto [expr, err] = semexpr_proc_call(ctx.scope, id.data, params); err)
@@ -494,6 +514,8 @@ namespace s22
 		auto &parent = this->context.top();
 		auto &inner_ctx = this->context.emplace();
 
+		// This scope is pushed before the function itself is defined
+		// The scope will be removed later by scope_add_decl_proc
 		inner_ctx.scope = parent.scope;
 		scope_push(inner_ctx.scope);
 	}
@@ -521,7 +543,7 @@ namespace s22
 		}
 
 		Symbol symbol = { .id = id, .type = proc_type, .defined_at = loc };
-		if (auto [sym, err] = scope_add_decl(ctx.scope->parent_scope, symbol); err)
+		if (auto [sym, err] = scope_add_decl_proc(ctx.scope, symbol); err)
 		{
 			if (err.loc == Source_Location{})
 			{
@@ -535,7 +557,7 @@ namespace s22
 		}
 		else
 		{
-			// Add return type and symbol
+			// Add procedure symbol
 			ctx.scope->proc_sym = sym;
 		}
 	}
@@ -571,7 +593,7 @@ namespace s22
 		if (semexpr_is_integral(expr.semexpr) == false)
 			return parser_log(Error{ expr.loc, "invalid type" });
 
-		auto &ctx = ctx_push(this->context);
+		auto &ctx = ctx_push_no_scope(this->context);
 		ctx.switch_expr = expr.ast;
 	}
 
@@ -579,8 +601,8 @@ namespace s22
 	Parser::switch_end(Source_Location loc)
 	{
 		Parse_Unit self = { .loc = loc };
-		
-		auto ctx = ctx_pop(this->context);
+
+		auto ctx = ctx_pop_no_scope(this->context);
 
 		// Collect switch cases from context
 		auto switch_cases = Buf<Switch_Case*>::make(ctx.switch_cases.size());
@@ -701,7 +723,7 @@ namespace s22
 	parser_log(const Error &err, Log_Level lvl)
 	{
 		auto parser = parser_instance();
-		if (lvl != Log_Level::INFO)
+		if (lvl == Log_Level::ERROR)
 			parser->has_errors = true;
 
 		auto msg = std::format("{}: {}", lvl, err);
@@ -709,7 +731,7 @@ namespace s22
 		yyerror(&err.loc, nullptr, msg.c_str());
 
 		if (lvl == Log_Level::CRITICAL)
-			exit(-1);
+			s22_unreachable_msg("CRITICAL ERROR");
 	}
 
 	void

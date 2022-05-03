@@ -45,13 +45,12 @@ namespace s22
 	void
 	backend_dispose(Backend self);
 
-	// Output quadruples (label (1) + instruction (4))
-	using Program = std::vector<std::array<std::string, 5>>;
-
-	Program
-	backend_write(Backend self);
-
 	// Compile AST into instructions, follow up with backend_write to retrieve the program as a list of quadruples
 	void
 	backend_compile(Backend self, AST ast);
+
+	// Output quadruples (label (1) + instruction (4))
+	using UI_Program = std::vector<std::array<std::string, 5>>;
+	UI_Program
+	backend_get_ui_program(Backend self);
 }

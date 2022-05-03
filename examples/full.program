@@ -1,6 +1,6 @@
 fn: proc(x: int, y: int) -> int
 {
-	z: int = x - y+;
+	z: int = x - y;
 	return z;
 }
 

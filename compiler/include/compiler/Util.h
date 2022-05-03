@@ -242,6 +242,32 @@ namespace s22
 	#define s22_DEFER_3(x)    s22_DEFER_2(x, __COUNTER__)
 
 	#define s22_defer s22::Defer s22_DEFER_3(_defer_) = [&]()
+
+	inline static void
+	_report_assert_msg(const char *expr, const char *message, const char *file, int line)
+	{
+		if (message)
+		{
+			fprintf(stderr, "ASSERT FAILED: %s, message=%s, file=%s, line=%d", expr, message, file, line);
+		}
+		else
+		{
+
+			fprintf(stderr, "ASSERT FAILED: %s, file=%s, line=%d", expr, file, line);
+		}
+	};
+
+	// Only define assertions for msvc
+	#if defined(NDEBUG) || !defined(_MSC_VER)
+		#define s22_assert(expr) ((void)0)
+		#define s22_assert_msg(expr, message) ((void)0)
+	#else
+		#define s22_assert(expr)				do { if (expr) {} else { s22::_report_assert_msg(#expr, nullptr, __FILE__, __LINE__); __debugbreak(); } } while(false)
+		#define s22_assert_msg(expr, message) 	do { if (expr) {} else { s22::_report_assert_msg(#expr, message, __FILE__, __LINE__); __debugbreak(); } } while(false)
+	#endif
+
+	#define s22_unreachable() s22_assert_msg(false, "unreachable")
+	#define s22_unreachable_msg(message) s22_assert_msg(false, message)
 }
 
 template<>

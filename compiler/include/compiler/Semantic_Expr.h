@@ -3,6 +3,8 @@
 #include "compiler/Util.h"
 #include "compiler/Backend.h"	// INSTRUCTION_OP
 
+#include <format>
+
 namespace s22
 {
 	struct Parse_Unit;
@@ -163,3 +165,44 @@ namespace s22
 	Result<Semantic_Expr>
 	semexpr_proc_call(Scope *scope, const char *id, const Buf<Parse_Unit> &params);
 }
+
+template <>
+struct std::formatter<s22::Semantic_Expr> : std::formatter<std::string>
+{
+	auto
+	format(const s22::Semantic_Expr &type, format_context &ctx)
+	{
+		using namespace s22;
+		if (type.procedure)
+		{
+			format_to(ctx.out(), "proc(");
+			{
+				format_to(ctx.out(), "{}", type.procedure->parameters);
+			}
+			format_to(ctx.out(), ")");
+
+			if (type.procedure->return_type != SEMEXPR_VOID)
+			{
+				format_to(ctx.out(), " -> ");
+				format_to(ctx.out(), "{}", type.procedure->return_type);
+			}
+		}
+		else
+		{
+			if (type.array)
+			{
+				format_to(ctx.out(), "[{}]", type.array);
+			}
+
+			switch (type.base)
+			{
+			case s22::Semantic_Expr::INT: return format_to(ctx.out(), "int");
+			case s22::Semantic_Expr::UINT: return format_to(ctx.out(), "uint");
+			case s22::Semantic_Expr::FLOAT: return format_to(ctx.out(), "float");
+			case s22::Semantic_Expr::BOOL: return format_to(ctx.out(), "bool");
+			default: break;
+			}
+		}
+		return ctx.out();
+	}
+};

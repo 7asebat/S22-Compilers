@@ -1,15 +1,35 @@
 #include "compiler/Semantic_Expr.h"
 #include "compiler/Parser.h"
 
+#include <format>
+#include <stdio.h>
+
 namespace s22
 {
-	Result<Semantic_Expr>
-	semexpr_literal(Scope *scope, Literal lit, Symbol_Type::BASE base)
+	bool
+	semexpr_allows_arithmetic(const Semantic_Expr &semexpr)
 	{
-		Semantic_Expr self = {};
-		self.type = { .base = base };
-		self.is_literal = true;
-		return self;
+		// Arrays are different from array access Expr{arr} != Expr{arr[i]}
+		return (semexpr.array || semexpr.procedure) == false;
+	}
+
+	bool
+	semexpr_is_integral(const Semantic_Expr &semexpr)
+	{
+		return semexpr == SEMEXPR_INT || semexpr == SEMEXPR_UINT || semexpr == SEMEXPR_BOOL;
+	}
+
+	void
+	semexpr_print(const Semantic_Expr &semexpr, FILE *out)
+	{
+		auto fmt = std::format("{}", semexpr);
+		fprintf(out, "%s", fmt.data());
+	}
+
+	Result<Semantic_Expr>
+	semexpr_literal(Scope *scope, Literal lit, Semantic_Expr::BASE base)
+	{
+		return Semantic_Expr{ .base = base, .is_literal = true };
 	}
 
 	Result<Semantic_Expr>
@@ -20,9 +40,7 @@ namespace s22
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
-		Semantic_Expr self = {};
-		self.type = sym->type;
-		return self;
+		return sym->type;
 	}
 
 	Result<Semantic_Expr>
@@ -33,7 +51,7 @@ namespace s22
 			return Error{ "undeclared identifier" };
 		sym->is_used = true;
 
-		if (sym->type != right.semexpr.type)
+		if (sym->type != right.semexpr)
 			return Error{ "type mismatch" };
 
 		if (sym->is_constant || sym->type.procedure)
@@ -41,33 +59,39 @@ namespace s22
 
 		sym->is_set = true;
 
-		Semantic_Expr self = {};
-		self.type = sym->type;
-		return self;
+		return sym->type;
 	}
 
 	Result<Semantic_Expr>
 	semexpr_array_assign(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Asn op)
 	{
-		if (left.semexpr.type != right.semexpr.type)
+		if (left.semexpr != right.semexpr)
 			return Error{ "type mismatch" };
 
-		Semantic_Expr self = {};
-		self.type = left.semexpr.type;
-		return self;
+		return left.semexpr;
 	}
 
 	Result<Semantic_Expr>
 	semexpr_binary(Scope *scope, const Parse_Unit &left, const Parse_Unit &right, Bin op)
 	{
-		// TODO: Cast to boolean
-		if (left.semexpr.type != right.semexpr.type)
-			return Error{ "type mismatch" };
-
-		if (symtype_allows_arithmetic(left.semexpr.type) == false)
+		if (semexpr_allows_arithmetic(left.semexpr) == false)
 			return Error{ left.loc, "invalid operand" };
 
-		Semantic_Expr self = {};
+		// Operand specific rules
+		switch (op)
+		{
+		case Bin::SHL: case Bin::SHR: case Bin::MOD:
+			if (semexpr_is_integral(right.semexpr))
+				return Error{ right.loc, "invalid operand" };
+
+		case Bin::L_AND: case Bin::L_OR:
+			break; // both types are cast to boolean
+
+		default:
+			if (left.semexpr != right.semexpr)
+				return Error{ "type mismatch" };
+		}
+
 		switch (op)
 		{
 		case Bin::ADD:
@@ -79,9 +103,7 @@ namespace s22
 		case Bin::OR:
 		case Bin::XOR:
 		case Bin::SHL:
-		case Bin::SHR:
-			self.type = left.semexpr.type;
-			break;
+		case Bin::SHR: return left.semexpr;
 
 		case Bin::LT:
 		case Bin::LEQ:
@@ -90,28 +112,26 @@ namespace s22
 		case Bin::GT:
 		case Bin::GEQ:
 		case Bin::L_AND:
-		case Bin::L_OR:
-			self.type = SYMTYPE_BOOL;
-			break;
-		}
+		case Bin::L_OR: return SEMEXPR_BOOL;
 
-		return self;
+		default: return Semantic_Expr{};
+		}
 	}
 
 	Result<Semantic_Expr>
 	semexpr_unary(Scope *scope, const Parse_Unit &right, Uny op)
 	{
-		if (symtype_allows_arithmetic(right.semexpr.type) == false)
+		if (semexpr_allows_arithmetic(right.semexpr) == false)
 			return Error{ right.loc, "invalid operand" };
 
-		Semantic_Expr self = {};
-
 		if (op != Uny::NOT)
-			self.type = right.semexpr.type;
+		{
+			return right.semexpr;
+		}
 		else
-			self.type = SYMTYPE_BOOL;
-
-		return self;
+		{
+			return SEMEXPR_BOOL;
+		}
 	}
 
 	Result<Semantic_Expr>
@@ -125,18 +145,17 @@ namespace s22
 		if (sym->type.array == false)
 			return Error{ "type cannot be indexed" };
 
-		if (symtype_is_integral(expr.semexpr.type) == false)
+		if (semexpr_is_integral(expr.semexpr) == false)
 			return Error{ expr.loc, "invalid index" };
 
-		Semantic_Expr self = {};
-		self.type = sym->type;
-		self.type.array = 0;
+		Semantic_Expr self = sym->type;
+		self.array = 0;
 
 		return self;
 	}
 
 	Result<Semantic_Expr>
-	semexpr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params)
+	semexpr_proc_call(Scope *scope, const char *id, const Buf<Parse_Unit> &params)
 	{
 		auto sym = scope_get_sym(scope, id);
 		if (sym == nullptr)
@@ -151,13 +170,51 @@ namespace s22
 
 		for (size_t i = 0; i < params.count; i++)
 		{
-			if (params[i].semexpr.type != sym->type.procedure->parameters[i])
+			if (params[i].semexpr != sym->type.procedure->parameters[i])
 				return Error{ params[i].loc, "invalid argument" };
 		}
 
-		Semantic_Expr self = {};
-		self.type = sym->type.procedure->return_type;
-
-		return self;
+		return sym->type.procedure->return_type;
 	}
 }
+
+template <>
+struct std::formatter<s22::Semantic_Expr> : std::formatter<std::string>
+{
+	auto
+	format(const s22::Semantic_Expr &type, format_context &ctx)
+	{
+		using namespace s22;
+		if (type.procedure)
+		{
+			format_to(ctx.out(), "proc(");
+			{
+				format_to(ctx.out(), "{}", type.procedure->parameters);
+			}
+			format_to(ctx.out(), ")");
+
+			if (type.procedure->return_type != SEMEXPR_VOID)
+			{
+				format_to(ctx.out(), " -> ");
+				format_to(ctx.out(), "{}", type.procedure->return_type);
+			}
+		}
+		else
+		{
+			if (type.array)
+			{
+				format_to(ctx.out(), "[{}]", type.array);
+			}
+
+			switch (type.base)
+			{
+			case s22::Semantic_Expr::INT: return format_to(ctx.out(), "int");
+			case s22::Semantic_Expr::UINT: return format_to(ctx.out(), "uint");
+			case s22::Semantic_Expr::FLOAT: return format_to(ctx.out(), "float");
+			case s22::Semantic_Expr::BOOL: return format_to(ctx.out(), "bool");
+			default: break;
+			}
+		}
+		return ctx.out();
+	}
+};

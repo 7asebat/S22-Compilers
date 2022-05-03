@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <array>
 #include <string>
 
 namespace s22
@@ -9,6 +10,7 @@ namespace s22
 	struct IBackend;
 	using Backend = IBackend*;
 
+	// Instructions are defined in the header to directly map different operation kinds to instructions
 	enum INSTRUCTION_OP
 	{
 		// Used for labels
@@ -35,17 +37,21 @@ namespace s22
 		I_CALL, I_RET,
 	};
 
+	// Backend singleton instance
 	Backend
 	backend_instance();
 
+	// Cleanup resources
 	void
 	backend_dispose(Backend self);
 
-	using Program = std::vector<std::vector<std::string>>;
+	// Output quadruples (label (1) + instruction (4))
+	using Program = std::vector<std::array<std::string, 5>>;
 
 	Program
 	backend_write(Backend self);
 
+	// Compile AST into instructions, follow up with backend_write to retrieve the program as a list of quadruples
 	void
 	backend_compile(Backend self, AST ast);
 }

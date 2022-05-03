@@ -3,9 +3,7 @@
 #include "compiler/Parser.h"
 
 #include <unordered_map>
-#include <iostream>
 #include <stack>
-#include <ranges>
 
 namespace s22
 {
@@ -31,8 +29,8 @@ namespace s22
 			PROC, END_PROC,
 		};
 		TYPE type;
-		uint64_t id;
-		Str text;
+		uint64_t id; // used for standard labels
+		String text; // used for proc labels
 	};
 
 	// Temporary register
@@ -65,7 +63,7 @@ namespace s22
 
 	struct Memory_Address
 	{
-		OPERAND_LOCATION base;
+		OPERAND_LOCATION base;	// [base_register + index_register + offset]
 		OPERAND_LOCATION index;
 		int offset;
 	};
@@ -115,20 +113,10 @@ namespace s22
 
 	template <typename... TArgs>
 	inline static void
-	be_instruction(Backend self, INSTRUCTION_OP op, TArgs &&...args)
+	be_instruction(Backend self, INSTRUCTION_OP op, TArgs &&...args) // Handles operand counts [0, 3]
 	{
 		Instruction ins = { op, Operand{std::forward<TArgs>(args)}... };
 		ins.operand_count = sizeof...(args);
-		self->program.push_back(ins);
-	}
-
-	template <typename... TArgs>
-	inline static void
-	be_label_with_instruction(Backend self, Label label, INSTRUCTION_OP op, TArgs &&...args)
-	{
-		Instruction ins = { op, {std::forward<TArgs>(args)}... };
-		ins.operand_count = sizeof...(args);
-		ins.label = label;
 		self->program.push_back(ins);
 	}
 
@@ -136,6 +124,16 @@ namespace s22
 	be_label(Backend self, Label label)
 	{
 		Instruction ins = { .label = label };
+		self->program.push_back(ins);
+	}
+
+	template <typename... TArgs>
+	inline static void
+	be_label_with_instruction(Backend self, Label label, INSTRUCTION_OP op, TArgs &&...args) // Handles operand counts [0, 3]
+	{
+		Instruction ins = { op, {std::forward<TArgs>(args)}... };
+		ins.operand_count = sizeof...(args);
+		ins.label = label;
 		self->program.push_back(ins);
 	}
 
@@ -202,9 +200,11 @@ namespace s22
 	inline static std::pair<Operand, Operand>
 	be_prepare_operands(Backend self, Operand op1, Operand op2)
 	{
+		// not memory-to-memory
 		if (op1.loc != OP_MEM || op2.loc != OP_MEM)
 			return { op1, op2 };
-		
+
+		// prepare op2
 		auto reg = be_get_reg(self);
 		be_instruction(self, I_MOV, reg, op2);
 
@@ -347,7 +347,7 @@ namespace s22
 	inline static void
 	be_decl(Backend self, const Symbol *sym)
 	{
-		uint64_t size = std::max(1ui64, sym->type.array); // in words
+		uint64_t size = std::max(1ui64, sym->type.array); // single or array, in words
 
 		// SP - size
 		self->stack_frame.top() += size;
@@ -376,12 +376,12 @@ namespace s22
 		int offset = 1; // [RBP]: Return address
 
 		// Return value
-		if (proc->sym->type.procedure->return_type != SYMTYPE_VOID)
+		if (proc->sym->type.procedure->return_type != SEMEXPR_VOID)
 		{
-			uint64_t size = std::max(1ui64, proc->sym->type.procedure->return_type.array);
+			uint64_t size = std::max(1ui64, proc->sym->type.procedure->return_type.array); // single or array
 
 			offset += size;
-			Memory_Address adr = { .base = RBP, .offset = offset };
+			Memory_Address adr = { .base = RBP, .offset = offset }; // First spot below the RBP
 			
 			// Where the return address symbol is
 			self->variables[proc->sym].address = adr;
@@ -394,7 +394,7 @@ namespace s22
 			uint64_t size = std::max(1ui64, sym->type.array); // in words
 
 			offset += size;
-			Memory_Address adr = { .base = RBP, .offset = offset };
+			Memory_Address adr = { .base = RBP, .offset = offset }; // Consecutive spots below RBP
 
 			self->variables[sym] = { adr };
 			self->variables[sym].size = size;
@@ -453,6 +453,7 @@ namespace s22
 		}
 		else
 		{
+			// Logical operations as intermediate boolean result, dst is set to either 0 or 1
 			Instruction ins = { .op = op, .dst = dst, .src1 = opr1, .src2 = opr2 };
 			if (op == I_LOG_AND)
 			{
@@ -486,6 +487,7 @@ namespace s22
 		}
 		else
 		{
+			// Logical operations as intermediate boolean result, dst is set to either 0 or 1
 			Instruction ins = { .op = I_LOG_NOT, .dst = dst, .src1 = right };
 			be_logical_not(self, ins);
 		}
@@ -502,10 +504,9 @@ namespace s22
 		for (const auto &arg : proc.parameters)
 			offset += std::max(1ui64, arg.array);
 
+		// leave room for return type on stack
 		int offset_before_return_value = offset;
-
-		// Add return type to stack
-		if (proc.return_type != SYMTYPE_VOID)
+		if (proc.return_type != SEMEXPR_VOID)
 		{
 			offset += std::max(1ui64, proc.return_type.array);
 		}
@@ -513,17 +514,17 @@ namespace s22
 		if (offset > 0)
 		{
 			be_instruction(self, I_SUB, RSP, offset);
-			{
-				int offset = offset_before_return_value;
 
-				// Add arguments to stack
+			// add arguments to stack
+			{
+				int arg_offset = offset_before_return_value;
 				for (auto arg : pcall->args)
 				{
 					auto src = be_generate(self, arg);
-					Memory_Address dst = {.base = RBP, .offset = -offset };
+					Memory_Address dst = {.base = RBP, .offset = -arg_offset };
 					be_instruction(self, I_MOV, dst, src);
 
-					offset -= src.size;
+					arg_offset -= src.size;
 				}
 			}
 
@@ -604,7 +605,7 @@ namespace s22
 	{
 		switch (ast.kind)
 		{
-		case AST::NIL: // ELSE branch
+		case AST::NIL: // cannot branch
 			break;
 
 		case AST::LITERAL: case AST::SYMBOL: case AST::PROC_CALL: case AST::ARRAY_ACCESS: {
@@ -923,7 +924,7 @@ namespace s22
 		Program program = {};
 		for (const auto &ins : self->program)
 		{
-			auto &line = program.emplace_back(5);
+			auto &line = program.emplace_back();
 
 			if (ins.label.type != s22::Label::NONE)
 				line[0] = std::format("{}", ins.label);

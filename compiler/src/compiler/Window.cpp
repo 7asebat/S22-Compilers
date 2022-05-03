@@ -28,7 +28,7 @@ namespace s22
 		HWND handle;
 		WNDCLASSEX window_class;
 	};
-	inline static Window wnd = {};
+	inline static Window window_instance = {};
 
 	int
 	window_init()
@@ -68,25 +68,25 @@ namespace s22
 		IMGUI_FONT_MONO = io.Fonts->AddFontFromFileTTF(FONTS_DIR "/CascadiaMono.ttf", 16.0f);
 		IMGUI_FONT_SANS = io.Fonts->AddFontFromFileTTF(FONTS_DIR "/DroidSans.ttf", 16.0f);
 
-		wnd.handle = hwnd;
-		wnd.window_class = wc;
+		window_instance.handle = hwnd;
+		window_instance.window_class = wc;
 		return 0;
 	}
 
 	bool
 	window_poll()
 	{
-		bool done = false;
+		bool not_done = true;
 		MSG msg;
         while (::PeekMessage(&msg, NULL, 0U, 0U, PM_REMOVE))
         {
             ::TranslateMessage(&msg);
             ::DispatchMessage(&msg);
             if (msg.message == WM_QUIT)
-                done = true;
+                not_done = false;
         }
 
-		return done;
+		return not_done;
 	}
 
 	void
@@ -118,8 +118,8 @@ namespace s22
 		ImGui::DestroyContext();
 
 		CleanupDeviceD3D();
-		::DestroyWindow(wnd.handle);
-		::UnregisterClass(wnd.window_class.lpszClassName, wnd.window_class.hInstance);
+		::DestroyWindow(window_instance.handle);
+		::UnregisterClass(window_instance.window_class.lpszClassName, window_instance.window_class.hInstance);
 	}
 
 	int
@@ -128,15 +128,14 @@ namespace s22
 		if (window_init() != 0)
 			return 1;
 
-		bool done = false;
-		while (done == false)
+		bool not_done = true;
+		while (not_done)
 		{
-			if (done = window_poll(); done)
+			if (not_done = window_poll(); not_done == false)
 				break;
 
 			window_frame_start();
 
-			
 			const auto viewport = ImGui::GetMainViewport();
 			ImGui::SetNextWindowPos(viewport->WorkPos);
 			ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -155,8 +154,7 @@ namespace s22
 			auto dockspace_id = ImGui::GetID(IMGUI_DOCKSPACE_ID);
 			ImGui::DockSpace(dockspace_id, ImVec2{}, ImGuiDockNodeFlags_PassthruCentralNode);
 
-			if (frame() == false)
-				done = true;
+			not_done = frame();
 
 			ImGui::End();
 			window_frame_render();
@@ -201,9 +199,9 @@ bool CreateDeviceD3D(HWND hWnd)
 void CleanupDeviceD3D()
 {
     CleanupRenderTarget();
-    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
-    if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
-    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
+    if (g_pSwapChain)			{ g_pSwapChain->Release(); g_pSwapChain = NULL; }
+    if (g_pd3dDeviceContext)	{ g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
+    if (g_pd3dDevice)			{ g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
 }
 
 void CreateRenderTarget()

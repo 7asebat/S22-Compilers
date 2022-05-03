@@ -7,6 +7,7 @@
 
 namespace s22
 {
+	// RAII memory manager
 	struct Memory_Log
 	{
 		std::unordered_set<void *> log;
@@ -17,10 +18,11 @@ namespace s22
 		inline void
 		free_all()
 		{
-			for (auto ptr : log)
-				free(ptr);
+			if (this->log.empty()) return;
+			for (auto ptr : log) free(ptr);
 			this->log.clear();
 		}
+
 		inline ~Memory_Log() { this->free_all(); };
 	};
 
@@ -39,33 +41,13 @@ namespace s22
 		return ptr;
 	}
 
-	template <typename T>
-	inline static T *
-	clone(const T& other)
-	{
-		auto ptr = alloc<T>();
-		*ptr = T{other};
-		return ptr;
-	}
-
-	template <typename T>
-	inline static void
-	destruct(T *&ptr)
-	{
-		if (ptr == nullptr)
-			return;
-
-		ptr->~T();
-		ptr = nullptr;
-	}
-
 	struct Source_Location
 	{
 		int first_line, first_column;
 		int last_line, last_column;
 
 		inline bool
-		operator ==(const Source_Location &other) const
+		operator==(const Source_Location &other) const
 		{
 			return first_line   == other.first_line &&
 				   first_column == other.first_column &&
@@ -77,9 +59,11 @@ namespace s22
 		operator !=(const Source_Location &other) const { return !operator==(other); }
 	};
 
+	// Reduces locations of the rhs of a production to the current
 	void
 	location_reduce(Source_Location &current, Source_Location *rhs, size_t N);
 
+	// Used by the lexer, sets the given location to the current token
 	void
 	location_update(Source_Location *loc);
 
@@ -108,10 +92,11 @@ namespace s22
 		inline static Buf<T>
 		clone(const std::vector<T> &vec)
 		{
-			auto self = make(vec.size());
+			Buf<T> self = {};
 
-			if (self.count > 0)
+			if (vec.size() > 0)
 			{
+				self = make(vec.size());
 				::memcpy(self.data, vec.data(), self.count * sizeof(T));
 			}
 			return self;
@@ -123,18 +108,6 @@ namespace s22
 			Buf<T> self = { .data = vec.data(), .count = vec.size() };
 			return self;
 		}
-
-		inline T &
-		operator[](size_t i) { return data[i]; }
-
-		inline const T &
-		operator[](size_t i) const { return data[i]; }
-
-		inline T*
-		begin() { return data; }
-
-		inline T*
-		end() { return data + count; }
 
 		inline bool
 		operator==(const Buf &other) const
@@ -149,17 +122,22 @@ namespace s22
 			}
 			return true;
 		}
+
+		inline T &operator[](size_t i)				{ return data[i]; }
+		inline const T &operator[](size_t i) const	{ return data[i]; }
+		inline T *begin()							{ return data; }
+		inline T *end()								{ return data + count; }
 	};
 
-	struct Str
+	struct String
 	{
 		constexpr static auto CAP = 256;
 
 		char data[CAP + 1];
 		size_t count;
 
-		inline Str() = default;
-		inline Str(const char *str)
+		inline String() = default;
+		inline String(const char *str)
 		{
 			*this = {};
 			if (str != nullptr)
@@ -169,53 +147,64 @@ namespace s22
 			}
 		}
 
-		inline bool
-		operator==(const char *other) const { return strcmp(data, other) == 0; }
-
-		inline bool
-		operator!=(const char *other) const { return !operator==(other); }
-
-		inline bool
-		operator==(const Str &other) const { return operator==(other.data); }
-
-		inline bool
-		operator!=(const Str &other) const { return !operator==(other); }
+		inline bool operator==(const char *other) const		{ return strcmp(data, other) == 0; }
+		inline bool operator!=(const char *other) const		{ return !operator==(other); }
+		inline bool operator==(const String &other) const	{ return operator==(other.data); }
+		inline bool operator!=(const String &other) const	{ return !operator==(other); }
 	};
 
+	template <typename T>
+	struct Optional
+	{
+		T *data;
+
+		inline explicit operator bool() const	{ return data != nullptr; }
+		inline bool operator==(bool v) const	{ return bool(*this) == v; }
+		inline bool operator!=(bool v) const	{ return !operator==(v); }
+
+		inline bool
+		operator==(const Optional &other) const
+		{
+			if (data == nullptr)
+				return data == other.data;
+
+			if (other.data == nullptr)
+				return false;
+
+			return *data == *other.data;
+		}
+
+		inline T &operator*()							{ return *data; }
+		inline const T&operator *() const				{ return *data; }
+		inline T*operator ->()							{ return data; }
+		inline const T*operator ->() const				{ return data; }
+		inline Optional &operator =(const T& other)		{ data = data ? data : alloc<T>(); *data = T{other}; return *this; }
+		inline const T&operator |(const T& other) const { return bool(*this) ? *data : other; }
+	};
+
+	// these utility constructs are heavily inspired by [mn: minimal container library on top of c-flavored c++](https://github.com/moustaphaSaad/mn)
 	struct Error
 	{
-		Str msg;
+		String msg;
 		Source_Location loc;
 
 		// creates a new error with the given error message
 		template<typename... TArgs>
-		Error(const char *fmt, TArgs &&...args) : msg({}), loc({})
-		{
-			msg = std::format(fmt, std::forward<TArgs>(args)...).c_str();
-		}
-
+		explicit Error(const char *fmt, TArgs &&...args) : msg({}), loc({})					{ msg = std::format(fmt, std::forward<TArgs>(args)...).c_str(); }
 		template<typename... TArgs>
-		Error(Source_Location loc, const char *fmt, TArgs &&...args) : msg({}), loc(loc)
-		{
-			msg = std::format(fmt, std::forward<TArgs>(args)...).c_str();
-		}
+		Error(Source_Location loc, const char *fmt, TArgs &&...args) : msg({}), loc(loc)	{ msg = std::format(fmt, std::forward<TArgs>(args)...).c_str(); }
 
-		Error(Source_Location loc, const Error &other) : msg(other.msg), loc(loc) {}
+		Error(Source_Location loc, const Error &other) : msg(other.msg), loc(loc) {}		// Overwrite location
 
-		Error() = default;
-		Error(const Error &other) = default;
-		Error(Error &&other) = default;
+		Error()                              = default;
+		Error(const Error &other)            = default;
+		Error(Error &&other)                 = default;
 		Error& operator=(const Error &other) = default;
-		Error& operator=(Error &&other) = default;
+		Error& operator=(Error &&other)      = default;
 
-		inline explicit
-		operator bool() const { return msg.count != 0; }
-
-		inline bool
-		operator==(bool v) const { return bool(*this) == v; }
-
-		inline bool
-		operator!=(bool v) const { return !operator==(v); }
+		inline explicit operator bool() const	{ return msg.count != 0; }
+		inline bool operator==(bool v) const	{ return bool(*this) == v; }
+		inline bool operator!=(bool v) const	{ return !operator==(v); }
 	};
 
 	template<typename T, typename E = Error>
@@ -233,64 +222,11 @@ namespace s22
 		template<typename... TArgs>
 		Result(TArgs &&...args) : val(std::forward<TArgs>(args)...), err(E{}) {}
 
-		Result(const Result &) = delete;
-
-		Result(Result &&) = default;
-
-		Result &
-		operator=(const Result &) = delete;
-
-		Result &
-		operator=(Result &&) = default;
-
-		~Result() = default;
-	};
-
-	template <typename T>
-	struct Optional
-	{
-		T *data;
-
-		inline explicit operator bool() const { return data != nullptr; }
-
-		inline bool
-		operator==(bool v) const { return bool(*this) == v; }
-
-		inline bool
-		operator!=(bool v) const { return !operator==(v); }
-
-		inline bool
-		operator==(const Optional &other) const
-		{
-			if (data == nullptr)
-				return data == other.data;
-
-			if (other.data == nullptr)
-				return false;
-
-			return *data == *other.data;
-		}
-
-		inline T &
-		operator*() { return *data; }
-
-		inline const T&
-		operator *() const { return *data; }
-
-		inline T*
-		operator ->() { return data; }
-
-		inline const T*
-		operator ->() const { return data; }
-
-		inline Optional &
-		operator =(T* other) { data = other; return *this; }
-
-		inline Optional &
-		operator =(const T& other) { data = alloc<T>(); *data = T{other}; return *this; }
-
-		inline T
-		operator |(const T& other) { return bool(*this) ? *data : other; }
+		Result(const Result &)            = delete;
+		Result(Result &&)                 = default;
+		Result& operator=(const Result &) = delete;
+		Result& operator=(Result &&)      = default;
+		~Result()                         = default;
 	};
 
 	template <typename F>
@@ -363,10 +299,10 @@ struct std::formatter<s22::Buf<T>> : std::formatter<std::string>
 };
 
 template <>
-struct std::formatter<s22::Str> : std::formatter<std::string>
+struct std::formatter<s22::String> : std::formatter<std::string>
 {
 	auto
-	format(const s22::Str &str, format_context &ctx)
+	format(const s22::String &str, format_context &ctx)
 	{
 		return format_to(ctx.out(), "{}", str.data);
 	}

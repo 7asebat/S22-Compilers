@@ -43,25 +43,26 @@ namespace s22
 		{
 			auto files = pfd::open_file("Open file").result();
 			if (files.empty() == false)
+			{
 				strcpy_s(filepath, files[0].c_str());
+				FILE *f = fopen(filepath, "r");
+				s22_defer { fclose(f); };
 
-			FILE *f = fopen(filepath, "r");
-			s22_defer { fclose(f); };
+				// Get file size
+				fseek(f, 0, SEEK_END);
+				size_t fsize = ftell(f);
+				rewind(f);
 
-			// Get file size
-			fseek(f, 0, SEEK_END);
-			size_t fsize = ftell(f);
-			rewind(f);
-
-			if (fsize + 2 > sizeof(source_code.buf))
-			{
-				parser_log(Error{"file too large; max file size is 8KB"});
-			}
-			else
-			{
-				memset(&source_code, 0, sizeof(source_code));
-				fread(source_code.buf, fsize, 1, f);
-				source_code.count = fsize;
+				if (fsize + 2 > sizeof(source_code.buf))
+				{
+					parser_log(Error{"file too large; max file size is 8KB"});
+				}
+				else
+				{
+					memset(&source_code, 0, sizeof(source_code));
+					fread(source_code.buf, fsize, 1, f);
+					source_code.count = fsize;
+				}
 			}
 		}
 

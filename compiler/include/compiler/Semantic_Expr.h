@@ -1,15 +1,76 @@
 #pragma once
 
-#include "compiler/AST.h"
-#include "compiler/Backend.h"
-#include "compiler/Symbol.h"
+#include "compiler/Util.h"
+#include "compiler/Backend.h"	// INSTRUCTION_OP
 
 namespace s22
 {
+	struct Parse_Unit;
+	struct Scope;
+	struct Literal;
+	struct Procedure;
+
+	// Semantic expression types
 	struct Semantic_Expr
 	{
-		bool is_literal;
-		Symbol_Type type;
+		// Base type
+		enum BASE
+		{
+			VOID,
+			PROC,
+
+			INT,
+			UINT,
+			FLOAT,
+			BOOL,
+		};
+		BASE base;
+
+		size_t array;					// array size, 0 if not an array
+		bool is_literal;				// true if a literal
+		Optional<Procedure> procedure;	// optional value if symbol represents a procedure
+
+		inline bool
+		operator==(const Semantic_Expr &other) const
+		{
+			if (base != other.base)
+				return false;
+
+			if (array != other.array)
+				return false;
+
+			if (procedure != other.procedure)
+				return false;
+
+			return true;
+		}
+
+		inline bool
+		operator!=(const Semantic_Expr &other) const { return !operator==(other); }
+	};
+
+	constexpr Semantic_Expr SEMEXPR_VOID  = { .base = Semantic_Expr::VOID  };
+	constexpr Semantic_Expr SEMEXPR_INT   = { .base = Semantic_Expr::INT   };
+	constexpr Semantic_Expr SEMEXPR_UINT  = { .base = Semantic_Expr::UINT  };
+	constexpr Semantic_Expr SEMEXPR_FLOAT = { .base = Semantic_Expr::FLOAT };
+	constexpr Semantic_Expr SEMEXPR_BOOL  = { .base = Semantic_Expr::BOOL  };
+
+	struct Procedure
+	{
+		Buf<Semantic_Expr> parameters;
+		Semantic_Expr return_type;
+
+		inline bool
+		operator==(const Procedure &other) const
+		{
+			if (parameters != other.parameters)
+				return false;
+
+			if (return_type != other.return_type)
+				return false;
+
+			return true;
+		}
 	};
 
 	enum class Asn
@@ -43,17 +104,17 @@ namespace s22
 		SHL = I_SHL, // A << B
 		SHR = I_SHR, // A >> B
 
-		LT  = I_LOG_LT,   	// A < B
-		LEQ = I_LOG_LEQ, 	// A <= B
+		LT  = I_LOG_LT,		// A < B
+		LEQ = I_LOG_LEQ,	// A <= B
 
-		EQ  = I_LOG_EQ,   	// A == B
-		NEQ = I_LOG_NEQ, 	// A != B
+		EQ  = I_LOG_EQ,		// A == B
+		NEQ = I_LOG_NEQ,	// A != B
 
-		GT  = I_LOG_GT,   	// A > B
-		GEQ = I_LOG_GEQ, 	// A >= B
+		GT  = I_LOG_GT,		// A > B
+		GEQ = I_LOG_GEQ,	// A >= B
 
-		L_AND = I_LOG_AND, 	// A && B
-		L_OR  = I_LOG_OR,   // A || B
+		L_AND = I_LOG_AND,	// A && B
+		L_OR  = I_LOG_OR,	// A || B
 	};
 
 	enum class Uny
@@ -68,10 +129,18 @@ namespace s22
 		NOT = I_LOG_NOT, // !A
 	};
 
-	struct Parse_Unit;
+	bool
+	semexpr_allows_arithmetic(const Semantic_Expr &semexpr);
 
+	bool
+	semexpr_is_integral(const Semantic_Expr &semexpr);
+
+	void
+	semexpr_print(const Semantic_Expr &semexpr, FILE *out);
+
+	// Constructors for different types
 	Result<Semantic_Expr>
-	semexpr_literal(Scope *scope, Literal lit, Symbol_Type::BASE base);
+	semexpr_literal(Scope *scope, Literal lit, Semantic_Expr::BASE base);
 
 	Result<Semantic_Expr>
 	semexpr_id(Scope *scope, const char *id);
@@ -92,5 +161,5 @@ namespace s22
 	semexpr_array_access(Scope *scope, const char *id, const Parse_Unit &expr);
 
 	Result<Semantic_Expr>
-	semexpr_proc_call(Scope *scope, const char *id, Buf<Parse_Unit> params);
+	semexpr_proc_call(Scope *scope, const char *id, const Buf<Parse_Unit> &params);
 }

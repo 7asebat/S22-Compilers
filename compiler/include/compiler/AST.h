@@ -3,24 +3,26 @@
 
 namespace s22
 {
-	struct Literal;
-	struct Symbol;
-	struct Proc_Call;
-	struct Array_Access;
-	struct Binary_Op;
-	struct Unary_Op;
-	struct Assignment;
-	struct Decl;
-	struct Decl_Proc;
-	struct If_Condition;
-	struct Switch_Case;
-	struct Switch;
-	struct While_Loop;
-	struct Do_While_Loop;
-	struct For_Loop;
-	struct Block;
-	struct Return;
+	struct Literal;			// 1, 2u, 3.14, true
+	struct Symbol;			// x, y
+	struct Proc_Call;		// my_proc(x, y)
+	struct Array_Access;	// arr[i]
+	struct Binary_Op;		// x + 5
+	struct Unary_Op;		// -4
+	struct Assignment;		// x = 4
+	struct Decl;			// x: int;
+	struct Decl_Proc;		// my_proc: proc(x: int, y: int) -> int {}
+	struct If_Condition;	// if cond {} else if cond2 {} else {}
+	struct Switch_Case;		// case 1, 2, 3 {}
+	struct Switch;			// switch expr { <CASE> default {} }
+	struct While_Loop;		// while cond do {}
+	struct Do_While_Loop;	// do {} while cond
+	struct For_Loop;		// for <INIT>; <COND>; <POST> {}
+	struct Block;			// { <STATEMENTS> }
+	struct Return;			// return expr;
 
+	// Each abstract syntax subtree represents a statement, which can be either one of all the previous expressions
+	// AST is a tagged union of different statement types
 	struct AST
 	{
 		enum KIND
@@ -84,6 +86,7 @@ namespace s22
 		operator==(const Literal &other) { return this->value == other.value; }
 	};
 
+	// Constructors for different types of ASTs
 	AST
 	ast_literal(Literal *literal);
 

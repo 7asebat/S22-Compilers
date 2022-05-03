@@ -13,13 +13,12 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: All
 AllowShortLoopsOnASingleLine: false
-AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterReturnType: All
 AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterCaseLabel: false
   AfterClass: true
-  AfterStruct: true
   AfterControlStatement: Always
   AfterEnum: true
   AfterFunction: true
@@ -37,7 +36,6 @@ BreakInheritanceList: BeforeColon
 ColumnLimit: 0
 CompactNamespaces: false
 ContinuationIndentWidth: 4
-FixNamespaceComments: false
 IndentCaseLabels: false
 IndentPPDirectives: None
 IndentWidth: 4

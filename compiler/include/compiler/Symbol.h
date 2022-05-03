@@ -1,87 +1,20 @@
 #pragma once
 
 #include "compiler/Util.h"
+#include "compiler/Semantic_Expr.h"
 
 #include <string>
 #include <vector>
 #include <variant>
-#include <format>
 
 namespace s22
 {
 	struct Parse_Unit;
-	struct Procedure;
-
-	struct Symbol_Type
-	{
-		enum BASE
-		{
-			VOID,
-			PROC,
-
-			INT,
-			UINT,
-			FLOAT,
-			BOOL,
-		};
-
-		BASE base;
-		size_t array;   // array size
-		Optional<Procedure> procedure;
-
-		inline bool
-		operator==(const Symbol_Type &other) const
-		{
-			if (base != other.base)
-				return false;
-
-			if (array != other.array)
-				return false;
-
-			if (procedure != other.procedure)
-				return false;
-
-			return true;
-		}
-
-		inline bool
-		operator!=(const Symbol_Type &other) const { return !operator==(other); }
-	};
-
-	struct Procedure
-	{
-		Buf<Symbol_Type> parameters;
-		Symbol_Type return_type;
-
-		inline bool
-		operator==(const Procedure &other) const
-		{
-			if (parameters != other.parameters)
-				return false;
-
-			if (return_type != other.return_type)
-				return false;
-
-			return true;
-		}
-	};
-
-	constexpr Symbol_Type SYMTYPE_VOID  = { .base = Symbol_Type::VOID };
-	constexpr Symbol_Type SYMTYPE_BOOL  = { .base = Symbol_Type::BOOL };
-
-	bool
-	symtype_allows_arithmetic(const Symbol_Type &type);
-
-	bool
-	symtype_is_integral(const Symbol_Type &type);
-
-	void
-	symtype_print(FILE *out, const Symbol_Type &type);
 
 	struct Symbol
 	{
-		Str id;
-		Symbol_Type type;
+		String id;
+		Semantic_Expr type;
 		Source_Location defined_at;
 
 		bool is_constant;
@@ -95,29 +28,38 @@ namespace s22
 		std::vector<Entry> table;
 
 		Scope *parent_scope;
-		size_t idx_in_parent_table;
+		size_t idx_in_parent_table; // index of current scope in the parent scope, used to track use before declaration
 
-		Symbol *proc_sym;
+		Symbol *proc_sym; // if scope is a procedure, holds the symbol to it
 	};
 
+	// Declare symbol in current scope
+	// Fails if duplicates exist
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol);
 
+	// Declare symbol in current scope, with assignment
+	// Fails on type mismatch, or assignment error
 	Result<Symbol *>
 	scope_add_decl(Scope *self, const Symbol &symbol, const Parse_Unit &expr);
 
+	// Push new scope, modifying the passed pointer and returning the old pointer
 	Scope *
 	scope_push(Scope *&self);
 
+	// Returns the symbol representing the proc the current scope is a part of
 	Result<Symbol *>
-	scope_return_matches_proc_sym(Scope *self, Symbol_Type type);
+	scope_return_matches_proc_sym(Scope *self, Semantic_Expr type);
 
+	// Pop current scope, modifying the passed pointer and returning the old pointer
 	Scope *
 	scope_pop(Scope *&self);
 
+	// Return the symbol represented by the identifier, nullptr if not found
 	Symbol *
 	scope_get_sym(Scope *self, const char *id);
 
+	// Builds a procedure, sets its arguments to all variables defined so far in the scope
 	Procedure
-	scope_make_proc(Scope *self, Symbol_Type return_type);
+	scope_make_proc(Scope *self, Semantic_Expr return_type);
 }

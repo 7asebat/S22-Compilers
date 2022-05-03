@@ -1,40 +1,16 @@
-#include "compiler/Symbol.h"
 #include "compiler/Util.h"
+#include "compiler/Symbol.h"
 #include "compiler/Semantic_Expr.h"
 #include "compiler/Parser.h"
 
-#include <stdio.h>
-#include <format>
-
 namespace s22
 {
-	bool
-	symtype_allows_arithmetic(const Symbol_Type &type)
-	{
-		// Arrays are different from array access Expr{arr} != Expr{arr[i]}
-		return (type.array || type.procedure) == false;
-	}
-
-	bool
-	symtype_is_integral(const Symbol_Type &type)
-	{
-		constexpr Symbol_Type SYMTYPE_INT  = { .base = Symbol_Type::INT };
-		constexpr Symbol_Type SYMTYPE_UINT = { .base = Symbol_Type::UINT };
-
-		return type == SYMTYPE_INT || type == SYMTYPE_UINT || type == SYMTYPE_BOOL;
-	}
-
-	void
-	symtype_print(FILE *out, const Symbol_Type &type)
-	{
-		auto fmt = std::format("{}", type);
-		fprintf(out, "%s", fmt.data());
-	}
-
 	template<typename T>
 	inline static T *
 	push_entry(Scope *self)
 	{
+		// NOTE: If symbol pointers change, the code breaks, as some data is hashed by pointers
+		// So we reserve size beforehand to ensure the data isn't moved
 		if (self->table.empty())
 			self->table.reserve(1024);
 
@@ -67,7 +43,7 @@ namespace s22
 		if (expr.err)
 			return expr.err;
 
-		if (symbol.type != expr.semexpr.type)
+		if (symbol.type != expr.semexpr)
 			return Error{expr.loc, "type mismatch"};
 
 		auto [sym, sym_err] = scope_add_decl(self, symbol);
@@ -92,7 +68,7 @@ namespace s22
 	}
 
 	Result<Symbol *>
-	scope_return_matches_proc_sym(Scope *self, Symbol_Type type)
+	scope_return_matches_proc_sym(Scope *self, Semantic_Expr type)
 	{
 		// Trace scope upwards until a function is found
 		for (auto scope = self; scope != nullptr; scope = scope->parent_scope)
@@ -158,10 +134,11 @@ namespace s22
 	}
 
 	Procedure
-	scope_make_proc(Scope *self, Symbol_Type return_type)
+	scope_make_proc(Scope *self, Semantic_Expr return_type)
 	{
-		Procedure proc = {};
-		proc.parameters = Buf<Symbol_Type>::make(self->table.size());
+		Procedure proc = { .return_type = return_type };
+
+		proc.parameters = Buf<Semantic_Expr>::make(self->table.size());
 		for (size_t i = 0; i < proc.parameters.count; i++)
 		{
 			auto &param = std::get<Symbol>(self->table[i]);
@@ -169,52 +146,6 @@ namespace s22
 			proc.parameters[i] = param.type;
 		}
 
-		if (return_type.base != Symbol_Type::VOID)
-		{
-			proc.return_type = return_type;
-		}
-
 		return proc;
 	}
 }
-
-template <>
-struct std::formatter<s22::Symbol_Type> : std::formatter<std::string>
-{
-	auto
-	format(const s22::Symbol_Type &type, format_context &ctx)
-	{
-		using namespace s22;
-		if (type.procedure)
-		{
-			format_to(ctx.out(), "proc(");
-			{
-				format_to(ctx.out(), "{}", type.procedure->parameters);
-			}
-			format_to(ctx.out(), ")");
-
-			if (type.procedure->return_type != SYMTYPE_VOID)
-			{
-				format_to(ctx.out(), " -> ");
-				format_to(ctx.out(), "{}", type.procedure->return_type);
-			}
-		}
-		else
-		{
-			if (type.array)
-			{
-				format_to(ctx.out(), "[{}]", type.array);
-			}
-
-			switch (type.base)
-			{
-			case s22::Symbol_Type::INT: return format_to(ctx.out(), "int");
-			case s22::Symbol_Type::UINT: return format_to(ctx.out(), "uint");
-			case s22::Symbol_Type::FLOAT: return format_to(ctx.out(), "float");
-			case s22::Symbol_Type::BOOL: return format_to(ctx.out(), "bool");
-			default: break;
-			}
-		}
-		return ctx.out();
-	}
-};

@@ -4,7 +4,7 @@
     #include "Parser.hpp"  // Token definitions
 
     // Call location_update before each token is processed
-    int yycolno = 1;
+    int yycolno = 1; // Used to track current column in the line
     #define YY_USER_ACTION location_update(yylloc);
 %}
 
@@ -62,7 +62,7 @@ bool     return BOOL;
 {identifier}    yylval->id         = yytext;        return IDENTIFIER;
 {lit_int}       yylval->value.s64  = atoi(yytext);  return LIT_INT;
 
-{lit_int}u {
+{lit_int}u { /* Unsigned int literal */
     yytext[yyleng-1]  = '\0';    // Remove 'u'
     yylval->value.u64 = atoi(yytext);
     return LIT_UINT;
@@ -93,7 +93,6 @@ bool     return BOOL;
 "&&"    return L_AND;
 "||"    return L_OR;
 
-
 [;:{},]     return *yytext; /* Return these characters as is */
 "("|")"     return *yytext;  
 "["|"]"     return *yytext;  
@@ -108,7 +107,7 @@ bool     return BOOL;
 YY_BUFFER_STATE
 s22::lexer_scan_buffer(char *buf, size_t buf_size)
 {
-    // Reset global line number
+    // Reset global line and column number
 	yylineno = 1;
     yycolno = 1;
 

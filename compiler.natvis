@@ -23,7 +23,7 @@
     </Expand>
   </Type>
 
-  <Type Name="s22::Str">
+  <Type Name="s22::String">
     <DisplayString Condition="count == 0">empty</DisplayString>
     <DisplayString Condition="count != 0" Encoding="Utf8">{data,[count]s8}</DisplayString>
   </Type>

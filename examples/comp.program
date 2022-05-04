@@ -1,0 +1,10 @@
+fn: proc(a: [2]int) -> [2]int
+{
+	return a;
+}
+
+a: [2]int;
+a[0] = 0;
+a[1] = 1;
+
+b: [2]int = fn(a);

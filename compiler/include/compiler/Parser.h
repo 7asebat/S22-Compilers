@@ -61,6 +61,9 @@ namespace s22
 		void
 		dispose();
 
+		Semantic_Expr
+		type_array(Source_Location loc, const Parse_Unit &literal, const Semantic_Expr &type_base);
+
 		void
 		block_begin();
 
@@ -83,7 +86,7 @@ namespace s22
 		id(Source_Location loc, const String &id);
 
 		Parse_Unit
-		array(Source_Location loc, const String &id, const Parse_Unit &right);
+		array_access(Source_Location loc, const String &id, const Parse_Unit &right);
 
 		Parse_Unit
 		assign(Source_Location loc, const String &id, Asn op, const Parse_Unit &right);
@@ -111,9 +114,6 @@ namespace s22
 
 		Parse_Unit
 		decl_expr(Source_Location loc, const String &id, Semantic_Expr type, const Parse_Unit &right);
-
-		Parse_Unit
-		decl_array(Source_Location loc, const String &id, Semantic_Expr type, const Parse_Unit &right);
 
 		Parse_Unit
 		decl_const(Source_Location loc, const String &id, Semantic_Expr type, const Parse_Unit &right);

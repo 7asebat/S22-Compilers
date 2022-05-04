@@ -57,7 +57,7 @@
 %type <unit> program stmt
 %type <unit> literal proc_call array_access
 %type <unit> expr expr_math expr_logic
-%type <type> type decl_proc_return
+%type <type> type type_base type_array decl_proc_return
 %type <unit> conditional c_else c_else_ifs
 %type <unit> assignment block loop loop_for_init loop_for_condition loop_for_post
 %type <unit> decl_var decl_const decl_proc
@@ -207,7 +207,6 @@ loop_for_post:
 decl_var:
 	IDENTIFIER ':' type							{ $$ = p->decl(@IDENTIFIER, $IDENTIFIER, $type); }
 	| IDENTIFIER ':' type '=' expr				{ $$ = p->decl_expr(@IDENTIFIER, $IDENTIFIER, $type, $expr); }
-	| IDENTIFIER ':' '[' literal ']' type		{ $$ = p->decl_array(@IDENTIFIER, $IDENTIFIER, $type, $literal); }
 	;
 
 decl_const:
@@ -240,11 +239,19 @@ decl_proc_return:
 	;
 
 type:
+	type_base
+	| type_array
+	;
+
+type_base:
 	INT			{ $$ = SEMEXPR_INT; }
 	| UINT		{ $$ = SEMEXPR_UINT; }
 	| FLOAT		{ $$ = SEMEXPR_FLOAT; }
 	| BOOL		{ $$ = SEMEXPR_BOOL; }
 	;
+
+type_array:
+	'[' literal ']' type_base		{ $$ = p->type_array(@literal, $literal, $type_base); }
 
 assignment:
 	IDENTIFIER '=' expr			{ $$ = p->assign(@2, $IDENTIFIER, Asn::MOV, $expr); }
@@ -338,7 +345,7 @@ comma_separated_exprs:
 	;
 
 array_access:
-	IDENTIFIER '[' expr ']'			{ $$ = p->array(@2, $IDENTIFIER, $expr); }
+	IDENTIFIER '[' expr ']'			{ $$ = p->array_access(@2, $IDENTIFIER, $expr); }
 	;
 
 %%

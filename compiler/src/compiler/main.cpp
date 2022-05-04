@@ -19,6 +19,7 @@ namespace s22
 	constexpr auto LOGS_WINDOW_TITLE = "Logs";
 
 	constexpr ImGuiWindowFlags WINDOW_FLAGS = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+	constexpr ImGuiTableFlags TABLE_FLAGS = ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable;
 
 	inline static void
 	source_code_window()
@@ -97,8 +98,7 @@ namespace s22
 				parser->ui_table.rows.clear();
 			}
 		}
-		ImGui::SameLine();
-		ImGui::Checkbox("Debug", &debug_enabled);
+		ImGui::SameLine(); ImGui::Checkbox("Debug", &debug_enabled);
 
 		ImGui::InputTextMultiline(
 			"##Source_Code",
@@ -125,7 +125,7 @@ namespace s22
 		{
 			ImGui::Text("Nothing to show...");
 		}
-		else if (ImGui::BeginTable("Quadruples", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
+		else if (ImGui::BeginTable("Quadruples", 5, TABLE_FLAGS))
 		{
 			s22_defer { ImGui::EndTable(); };
 
@@ -200,7 +200,7 @@ namespace s22
 		{
 			ImGui::Text("Nothing to show...");
 		}
-		else if (ImGui::BeginTable("Symbol Table", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
+		else if (ImGui::BeginTable("Symbol Table", 5, TABLE_FLAGS))
 		{
 			s22_defer { ImGui::EndTable(); };
 
@@ -243,10 +243,14 @@ namespace s22
 		if (ImGui::Button("Clear"))
 			parser->ui_logs.clear();
 	}
+}
 
-	inline static bool
-	frame()
-	{
+int
+main(int, char**)
+{
+	using namespace s22;
+
+	s22::window_run([]() -> bool {
 		static bool first_dock = true;
 		if (first_dock)
 		{
@@ -275,12 +279,6 @@ namespace s22
 		logs_window();
 
 		return true;
-	}
-}
-
-int
-main(int, char**)
-{
-	s22::window_run(s22::frame);
+	});
 	return 0;
 }

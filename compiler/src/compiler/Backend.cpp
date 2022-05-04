@@ -44,6 +44,7 @@ namespace s22
 		RSP, RBP, RSI, RDI, // reserved registers
 		OP_IMM,				// immediate value
 		OP_MEM,				// memory address
+		OP_MEM_RANGE,		// memory range
 		OP_LBL,				// label
 		OP_COND,			// condition
 	};
@@ -53,6 +54,12 @@ namespace s22
 		OPERAND_LOCATION base;	// [base_register + index_register + offset]
 		OPERAND_LOCATION index;
 		int offset;
+	};
+
+	struct Memory_Range
+	{
+		Memory_Address start;
+		size_t size;
 	};
 
 	struct Operand
@@ -66,11 +73,13 @@ namespace s22
 		inline Operand(uint64_t v)				{ *this = {}; size = 1; loc = OP_IMM; value = v; }
 		inline Operand(Label lbl)				{ *this = {}; size = 1; loc = OP_LBL; label = lbl; }
 		inline Operand(Memory_Address adr)		{ *this = {}; size = 1; loc = OP_MEM; address = adr; }
+		inline Operand(Memory_Range r)			{ *this = {}; size = r.size; loc = OP_MEM_RANGE, range = r; }
 
 		union // immediate value/memory offset
 		{
 			uint64_t value;
 			Memory_Address address;
+			Memory_Range range;			// Used for arrays
 		};
 		Label label;	// set when loc is a label
 						// TODO: procedures carry both their label and their address here, change this
@@ -328,9 +337,30 @@ namespace s22
 	inline static void
 	be_assign(Backend self, INSTRUCTION_OP op, Operand left, Operand right)
 	{
-		auto [dst, src] = be_prepare_operands(self, left, right);
-		be_instruction(self, op, dst, src);
-		be_clear_reg_all(self);
+		if (left.loc == OP_MEM_RANGE) // compound assignment
+		{
+			s22_assert_msg(op == I_MOV, "compound assignment with an operation");
+			s22_assert_msg(right.loc == OP_MEM_RANGE && right.range.size == left.range.size, "compound assignment with invalid rhs");
+
+			// mov op byte by byte
+			Memory_Address dst_adr = left.range.start;
+			Memory_Address src_adr = right.range.start;
+			auto reg = be_get_reg(self);
+
+			for (size_t i = 0; i < left.range.size; i++)
+			{
+				be_instruction(self, I_MOV, reg, src_adr);
+				be_instruction(self, I_MOV, dst_adr, reg);
+				src_adr.offset += 1;
+				dst_adr.offset += 1;
+			}
+		}
+		else
+		{
+			auto [dst, src] = be_prepare_operands(self, left, right);
+			be_instruction(self, op, dst, src);
+			be_clear_reg_all(self);
+		}
 	}
 
 	inline static void
@@ -341,9 +371,17 @@ namespace s22
 		// SP - size
 		self->stack_frame.top() += size;
 
-		Memory_Address adr = { .base = RBP, .offset = -(int)self->stack_frame.top() };
-		self->variables[sym] = { adr };
-		self->variables[sym].size = size;
+		if (size == 1)
+		{
+			Memory_Address adr = {.base = RBP, .offset = -(int)self->stack_frame.top()};
+			self->variables[sym] = {adr};	
+		}
+		else
+		{
+			Memory_Address start = {.base = RBP, .offset = -(int)self->stack_frame.top()};
+			Memory_Range r = {.start = start, .size = size};
+			self->variables[sym] = {r};
+		}
 	}
 
 	inline static void
@@ -356,12 +394,11 @@ namespace s22
 	inline static void
 	be_decl_proc(Backend self, Decl_Proc *proc, Label proc_lbl)
 	{
-		Operand proc_opr = {proc_lbl};
 		self->variables[proc->sym] = {proc_lbl};
 
 						// [RBP]:   old RBP
-		int offset = 1;	// [RBP+1]: return address
-						// [RBP+2]: return value if any, or first argument
+						// [RBP+1]: return address
+		int offset = 2;	// [RBP+2]: return value if any, or first argument
 						// [RBP+3]: remaining arguments
 
 		// Return value
@@ -369,11 +406,20 @@ namespace s22
 		{
 			uint64_t size = std::max(1ui64, proc->sym->type.procedure->return_type.array); // single or array
 
+			if (size == 1)
+			{
+				Memory_Address adr = { .base = RBP, .offset = offset }; // First spot below RBP+1
+				self->variables[proc->sym].address = adr;	// where the return address symbol is
+															// address is used alongsize the label
+			}
+			else
+			{
+				Memory_Address start = {.base = RBP, .offset = offset};
+				Memory_Range r = {.start = start, .size = size};
+				self->variables[proc->sym].range = r;
+			}
+	
 			offset += size;
-			Memory_Address adr = { .base = RBP, .offset = offset }; // First spot below RBP+1
-			
-			// Where the return address symbol is, address is used alongsize the label
-			self->variables[proc->sym].address = adr;
 		}
 
 		// Add arguments
@@ -382,11 +428,19 @@ namespace s22
 			auto sym = arg->sym;
 			uint64_t size = std::max(1ui64, sym->type.array); // in words
 
+			if (size == 1)
+			{
+				Memory_Address adr = { .base = RBP, .offset = offset }; // Consecutive spots below RBP+1
+				self->variables[sym] = { adr };
+			}
+			else
+			{
+				Memory_Address start = {.base = RBP, .offset = offset};
+				Memory_Range r = {.start = start, .size = size};
+				self->variables[sym] = {r};
+			}
+			
 			offset += size;
-			Memory_Address adr = { .base = RBP, .offset = offset }; // Consecutive spots below RBP+1
-
-			self->variables[sym] = { adr };
-			self->variables[sym].size = size;
 		}
 	}
 
@@ -408,6 +462,7 @@ namespace s22
 	be_array_access(Backend self, const Array_Access *arr)
 	{
 		auto opr = be_sym(self, arr->sym);
+		opr.loc = OP_MEM; // replace range with address
 
 		auto idx = be_generate(self, arr->index);
 		if (idx.loc == OP_IMM)
@@ -506,16 +561,26 @@ namespace s22
 		{
 			be_instruction(self, I_SUB, RSP, offset);
 
-			// add arguments to stack
+			// [RSP+<return type size>] return type
+			// arguments below
 			{
-				int arg_offset = offset_before_return_value;
+				int arg_offset = offset - offset_before_return_value;
 				for (auto arg : pcall->args)
 				{
 					auto src = be_generate(self, arg);
-					Memory_Address dst = {.base = RBP, .offset = -arg_offset };
-					be_instruction(self, I_MOV, dst, src);
+					Memory_Address dst = {.base = RSP, .offset = arg_offset};
 
-					arg_offset -= src.size;
+					if (src.loc == OP_MEM_RANGE) // compound assignment
+					{
+						Memory_Range dst_range = {.start = dst, .size = src.range.size};
+						be_assign(self, I_MOV, dst_range, src);
+					}
+					else
+					{
+						be_assign(self, I_MOV, dst, src);
+					}
+
+					arg_offset += src.size;
 				}
 			}
 
@@ -524,6 +589,21 @@ namespace s22
 
 			// remove call arguments
 			be_instruction(self, I_ADD, RSP, offset);
+
+			if (proc.return_type != SEMEXPR_VOID)
+			{
+				if (proc.return_type.array > 0) // compound return
+				{
+					Memory_Address start = {.base = RSP, .offset = -offset};
+					Memory_Range r = {.start = start, .size = proc.return_type.array};
+					return r;
+				}
+				else
+				{
+					Memory_Address dst = {.base = RSP, .offset = -offset};
+					return dst;
+				}
+			}
 		}
 		else
 		{
@@ -531,10 +611,7 @@ namespace s22
 			be_instruction(self, I_CALL, be_sym(self, pcall->sym));
 		}
 
-		Operand ret = {};
-		ret.loc = OP_MEM;
-		ret.address = {.base = RBP, .offset = -offset};
-		return ret;
+		return {};
 	}
 
 	inline static void
@@ -870,15 +947,23 @@ namespace s22
 
 		case AST::RETURN: {
 			auto &ret = ast.as_return;
-			auto expr = be_generate(self, ret->expr);
 
-			Operand dst = {self->variables[ret->proc_sym].address};
-			be_assign(self, I_MOV, dst, expr);
+			if (auto return_type = ret->proc_sym->type.procedure->return_type; return_type != SEMEXPR_VOID)
+			{
+				auto expr = be_generate(self, ret->expr);
+				if (expr.loc == OP_MEM_RANGE)
+				{
+					be_assign(self, I_MOV, self->variables[ret->proc_sym].range, expr);
+				}
+				else
+				{
+					be_assign(self, I_MOV, self->variables[ret->proc_sym].address, expr);
+				}
+			}
 			
 			Label return_lbl = {.type = Label::END_PROC, .text = ret->proc_sym->id};
 			be_instruction(self, I_BR, return_lbl);
-
-			// BRANCH TO END
+		
 			return {};
 		}
 

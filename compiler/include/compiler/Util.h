@@ -207,6 +207,15 @@ namespace s22
 		inline bool operator!=(bool v) const	{ return !operator==(v); }
 	};
 
+	inline static Error
+	err_backup_loc(const Error &err, Source_Location loc)
+	{
+		Error self = err;
+		if (self.loc == Source_Location{})
+			self.loc = loc;
+		return self;
+	}
+
 	template<typename T, typename E = Error>
 	struct Result
 	{

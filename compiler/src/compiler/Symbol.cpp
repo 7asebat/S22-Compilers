@@ -60,11 +60,9 @@ namespace s22
 		// Entry point is a scope where all parameters are defined
 		// self = &table.back();
 		// Pop scope temporarily
-		if (self != &std::get<Scope>(self->parent_scope->table.back()))
-		{
-			s22_unreachable_msg("scope isn't last in its parent's table");
-		}
-
+		s22_assert_msg(self == &std::get<Scope>(self->parent_scope->table.back()),
+			"scope isn't last in its parent's table");
+		
 		auto inner_scope = std::move(*self);
 		self = inner_scope.parent_scope;
 

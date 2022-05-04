@@ -2,9 +2,10 @@
 Language compiler in flex+bison
 
 ## Get started
-```sh
-$ make compile
-$ make run
+```cmd
+> cmake -Bbuild
+> cmake --build build
+> build\compiler.exe
 ```
 
 ## Syntax

@@ -116,6 +116,25 @@ namespace s22
 		mem->free_all();
 	}
 
+	Semantic_Expr
+	Parser::type_array(Source_Location loc, const Parse_Unit &literal, const Semantic_Expr &type_base)
+	{
+		Semantic_Expr self = {};
+		if (literal.err)
+		{
+			return self;
+		}
+		if (semexpr_is_integral(literal.semexpr) == false)
+		{
+			return self;
+		}
+
+		self = type_base;
+		self.array = literal.ast.as_lit->value;
+
+		return self;
+	}
+
 	void
 	Parser::block_begin()
 	{
@@ -154,7 +173,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [proc_sym, err] = scope_return_matches_proc_sym(ctx.scope, SEMEXPR_VOID); err)
 		{
-			self.err = Error{loc, err};
+			self.err = err_backup_loc(err, loc);
 			parser_log(self.err);
 		}
 		else
@@ -173,7 +192,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [proc_sym, err] = scope_return_matches_proc_sym(ctx.scope, expr.semexpr); err)
 		{
-			self.err = Error{expr.loc, err};
+			self.err = err_backup_loc(err, loc);
 			if (expr.err == false)  // Limit error propagation
 				parser_log(self.err);
 		}
@@ -234,7 +253,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_id(ctx.scope, id.data); err)	// Verify semantics
 		{
-			self.err = Error{loc, err};
+			self.err = err_backup_loc(err, loc);
 			parser_log(self.err);
 		}
 		else if (auto sym = scope_get_sym(ctx.scope, id.data))		// Build AST
@@ -251,15 +270,14 @@ namespace s22
 	}
 
 	Parse_Unit
-	Parser::array(Source_Location loc, const String &id, const Parse_Unit &right)
+	Parser::array_access(Source_Location loc, const String &id, const Parse_Unit &right)
 	{
 		Parse_Unit self = {.loc = loc};
 		
 		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_array_access(ctx.scope, id.data, right); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			if (right.err == false)
 				parser_log(self.err);
 		}
@@ -280,8 +298,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_assign(ctx.scope, id.data, right, op); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			if (right.err == false)
 				parser_log(self.err);
 		}
@@ -301,7 +318,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_array_assign(ctx.scope, left, right, op); err)
 		{
-			self.err = Error{loc, err};
+			self.err = err_backup_loc(err, loc);
 			if (right.err == false)
 				parser_log(self.err);
 		}
@@ -322,8 +339,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_binary(ctx.scope, left, right, op); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			if (left.err == false && right.err == false)
 				parser_log(self.err);
 		}
@@ -344,8 +360,7 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [expr, err] = semexpr_unary(ctx.scope, right, op); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			if (right.err == false)
 				parser_log(self.err);
 		}
@@ -383,8 +398,7 @@ namespace s22
 
 		if (auto [expr, err] = semexpr_proc_call(ctx.scope, id.data, params); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			bool unique_error = true;
 			for (const auto &unit : params)
 			{
@@ -421,12 +435,12 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol); err)
 		{
-			self.err = Error{loc, err};
+			self.err = err_backup_loc(err, loc);
 			parser_log(self.err);
 		}
 		else
 		{
-			ctx.stack_offset += 1;
+			ctx.stack_offset += std::max(1ui64, symbol.type.array);
 			self.ast = ast_decl(sym, AST{});
 		}
 		return self;
@@ -441,41 +455,16 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol, right); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			if (right.err == false)
 				parser_log(self.err);
 		}
 		else
 		{
-			ctx.stack_offset += 1;
+			ctx.stack_offset += std::max(1ui64, symbol.type.array);
 			self.ast = ast_decl(sym, right.ast);
 		}
 		
-		return self;
-	}
-
-	Parse_Unit
-	Parser::decl_array(Source_Location loc, const String &id, Semantic_Expr type, const Parse_Unit &right)
-	{
-		Parse_Unit self = { .loc = loc };
-		
-		Symbol symbol = { .id = id, .type = type, .defined_at = loc };
-		symbol.type.array = right.ast.as_lit->value;
-
-		auto &ctx = this->context.top();
-		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol); err)
-		{
-			self.err = Error{loc, err};
-
-			if (right.err == false)
-				parser_log(self.err);
-		}
-		else
-		{
-			ctx.stack_offset += symbol.type.array;
-			self.ast = ast_decl(sym, AST{});
-		}
 		return self;
 	}
 
@@ -488,14 +477,13 @@ namespace s22
 		auto &ctx = this->context.top();
 		if (auto [sym, err] = scope_add_decl(ctx.scope, symbol, right); err)
 		{
-			self.err = Error{loc, err};
-
+			self.err = err_backup_loc(err, loc);
 			if (right.err == false)
 				parser_log(self.err);
 		}
 		else
 		{
-			ctx.stack_offset += 1;
+			ctx.stack_offset += std::max(1ui64, symbol.type.array);
 			self.ast = ast_decl(sym, right.ast);
 		}
 
@@ -545,15 +533,7 @@ namespace s22
 		Symbol symbol = { .id = id, .type = proc_type, .defined_at = loc };
 		if (auto [sym, err] = scope_add_decl_proc(ctx.scope, symbol); err)
 		{
-			if (err.loc == Source_Location{})
-			{
-				// Fill with loc if error has none
-				parser_log(Error{loc, err});
-			}
-			else
-			{
-				parser_log(err);
-			}
+			parser_log(err);
 		}
 		else
 		{

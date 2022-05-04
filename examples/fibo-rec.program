@@ -1,0 +1,11 @@
+fibo: proc(i: int) -> int
+{
+	if i == 0 || i == 1
+	{
+		return 1;
+	}
+	else
+	{
+		return fibo(i-1) + fibo(i-2);
+	}
+}

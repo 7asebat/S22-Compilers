@@ -13,25 +13,22 @@ yyparse(s22::Parser *);
 
 namespace s22
 {
-	constexpr auto COMPILER_WINDOW_TITLE = "Compiler";
 	constexpr auto SOURCE_CODE_WINDOW_TITLE = "Source Code";
+	constexpr auto QUADRUPLES_WINDOW_TITLE = "Quadruples";
 	constexpr auto SYMBOL_TABLE_WINDOW_TITLE = "Symbol Table";
 	constexpr auto LOGS_WINDOW_TITLE = "Logs";
 
 	constexpr ImGuiWindowFlags WINDOW_FLAGS = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 
-	inline static s22::UI_Program ui_program = {};
-	inline static s22::UI_Symbol_Table ui_table = {};
-
 	inline static void
-	compiler_window()
+	source_code_window()
 	{
 		s22_defer { ImGui::End(); };
-		if (ImGui::Begin(COMPILER_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
+		if (ImGui::Begin(SOURCE_CODE_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
 			return;
-		
+
 		auto parser = s22::parser_instance();
-		auto &source_code = parser->source_code;
+		auto &source_code = parser->ui_source_code;
 
 		static char filepath[1024] = {};
 		if (filepath[0] == '\0')
@@ -49,12 +46,12 @@ namespace s22
 			if (files.empty() == false)
 			{
 				strcpy_s(filepath, files[0].c_str());
-				FILE *f = fopen(filepath, "r");
+				auto f = fopen(filepath, "r");
 				s22_defer { fclose(f); };
 
 				// Get file size
 				fseek(f, 0, SEEK_END);
-				size_t fsize = ftell(f);
+				auto fsize = ftell(f);
 				rewind(f);
 
 				if (fsize + 2 > sizeof(source_code.buf))
@@ -71,41 +68,64 @@ namespace s22
 		}
 
 		static bool debug_enabled = false;
-		
-		if (ImGui::Button("Compile"))
+		if (ImGui::SameLine(); ImGui::Button("Compile"))
 		{
-
 			auto lexer_buf = lexer_scan_buffer(source_code.buf, source_code.count + 2);
 			if (lexer_buf == nullptr)
 			{
 				parser_log(Error{"lexer buffer is nullptr"});
 				return;
 			}
-			s22_defer { lexer_delete_buffer(lexer_buf); };
+			s22_defer
+			{
+				lexer_delete_buffer(lexer_buf);
+			};
 
-			// Discard old data, run parser;
+			// Discard old data, run parser
 			yydebug = debug_enabled ? 1 : 0;
 			parser->dispose();
 			yyparse(parser);
 
 			if (parser->has_errors == false)
 			{
-				ui_program = parser->program_write();
-				ui_table = scope_get_ui_table(&parser->global);
+				parser->ui_program = parser->program_write();
+				parser->ui_table = scope_get_ui_table(&parser->global);
 			}
 			else
 			{
-				ui_program = {};
-				ui_table = {};
+				parser->ui_program.clear();
+				parser->ui_table.rows.clear();
 			}
 		}
 		ImGui::SameLine();
 		ImGui::Checkbox("Debug", &debug_enabled);
 
-		if (ui_program.empty())
-			return;
+		ImGui::InputTextMultiline(
+			"##Source_Code",
+			source_code.buf, sizeof(source_code.buf),
+			ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_CallbackEdit | ImGuiInputTextFlags_AllowTabInput,
+			[](ImGuiInputTextCallbackData* data) -> int {
+				auto scode = (UI_Source_Code *)data->UserData;
+				scode->count = data->BufTextLen;
+				return 0;
+			},
+			(void*)&source_code
+		);
+	}
 
-		if (ImGui::BeginTable("Quadruples", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
+	inline static void
+	quadruples_window()
+	{
+		s22_defer { ImGui::End(); };
+		if (ImGui::Begin(QUADRUPLES_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
+			return;
+		
+		auto &ui_program = parser_instance()->ui_program;
+		if (ui_program.empty())
+		{
+			ImGui::Text("Nothing to show...");
+		}
+		else if (ImGui::BeginTable("Quadruples", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
 		{
 			s22_defer { ImGui::EndTable(); };
 
@@ -125,43 +145,13 @@ namespace s22
 	}
 
 	inline static void
-	source_code_window()
-	{
-		s22_defer { ImGui::End(); };
-		if (ImGui::Begin(SOURCE_CODE_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
-			return;
-
-		auto &source_code = parser_instance()->source_code;
-		ImGui::InputTextMultiline(
-			"##Source_Code",
-			source_code.buf, sizeof(source_code.buf),
-			ImGui::GetContentRegionAvail(), ImGuiInputTextFlags_CallbackEdit | ImGuiInputTextFlags_AllowTabInput,
-			[](ImGuiInputTextCallbackData* data) -> int {
-				auto scode = (Source_Code *)data->UserData;
-				scode->count = data->BufTextLen;
-				return 0;
-			},
-			(void*)&source_code
-		);
-	}
-
-	inline static void
 	symbol_table_build(UI_Symbol_Table &table, size_t depth)
 	{
-		for (size_t i = 0; i < table->size(); i++)
+		for (auto &row : table.rows)
 		{
-			auto &row = table.table[i];
-
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			if (depth == 0)
-			{
-				ImGui::Text("|");
-			}
-			else
-			{
-				ImGui::Text("|%s", std::string(depth, '>').c_str());
-			}
+			ImGui::Text("|%s", std::string(depth, '>').c_str());
 
 			if (std::holds_alternative<UI_Symbol_Row>(row))
 			{
@@ -171,21 +161,22 @@ namespace s22
 					ImGui::Text("%s", cell.c_str());
 				}
 			}
-			else if (std::holds_alternative<const Scope*>(row))
+			else if (std::holds_alternative<const Scope*>(row)) // Collapsed scope
 			{
-				auto label = std::format("expand##{}-{}", (void*)table.scope, i);
-
-				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str())) // Inner table
+				auto label = std::format("expand##{}", (void*)table.scope);
+				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str()))
 				{
-					row = scope_get_ui_table(std::get<const Scope*>(row));
+					// scope ptr -> table
+					auto &scope = std::get<const Scope *>(row);
+					row = scope_get_ui_table(scope);
 				}
 			}
-			else
+			else // expanded scope
 			{
-				auto label = std::format("collapse##{}-{}", (void*)table.scope, i);
-
-				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str())) // Inner table
+				auto label = std::format("collapse##{}", (void*)table.scope);
+				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str()))
 				{
+					// table -> scope ptr
 					auto &table = std::get<UI_Symbol_Table>(row);
 					row = table.scope;
 				}
@@ -204,13 +195,12 @@ namespace s22
 		if (ImGui::Begin(SYMBOL_TABLE_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
 			return;
 
-		if (ui_table->empty())
+		auto &ui_table = parser_instance()->ui_table;
+		if (ui_table.rows.empty())
 		{
 			ImGui::Text("Nothing to show...");
-			return;
 		}
-
-		if (ImGui::BeginTable("Symbol Table", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
+		else if (ImGui::BeginTable("Symbol Table", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
 		{
 			s22_defer { ImGui::EndTable(); };
 
@@ -229,32 +219,29 @@ namespace s22
 		if (ImGui::Begin(LOGS_WINDOW_TITLE, nullptr, WINDOW_FLAGS) == false)
 			return;
 
-		ImGui::PushFont(IMGUI_FONT_MONO);
-		s22_defer { ImGui::PopFont(); };
-
 		auto parser = s22::parser_instance();
 
 		const float footer_height_to_reserve = ImGui::GetFrameHeightWithSpacing();
 		if (ImGui::BeginChild("Logs", ImVec2{0.f, -footer_height_to_reserve}))
 		{
-			ImGuiListClipper clipper = {(int)parser->logs.size()};
+			ImGuiListClipper clipper = {(int)parser->ui_logs.size()};
 			while (clipper.Step())
 			{
 				for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-					ImGui::Text("%s", parser->logs[i].c_str());
+					ImGui::Text("%s", parser->ui_logs[i].c_str());
 			}
 
 			static size_t last_count = 0;
-			if (last_count != parser->logs.size())
+			if (last_count != parser->ui_logs.size())
 			{
 				ImGui::SetScrollHereY(1.f);
-				last_count = parser->logs.size();
+				last_count = parser->ui_logs.size();
 			}
 		}
 		ImGui::EndChild();
 
 		if (ImGui::Button("Clear"))
-			parser->logs.clear();
+			parser->ui_logs.clear();
 	}
 
 	inline static bool
@@ -276,14 +263,14 @@ namespace s22
 			auto dockspace_bot = dockspace_id;
 
 			ImGui::DockBuilderDockWindow(SOURCE_CODE_WINDOW_TITLE, dockspace_top_left);
-			ImGui::DockBuilderDockWindow(COMPILER_WINDOW_TITLE, dockspace_top_right);
+			ImGui::DockBuilderDockWindow(QUADRUPLES_WINDOW_TITLE, dockspace_top_right);
 			ImGui::DockBuilderDockWindow(SYMBOL_TABLE_WINDOW_TITLE, dockspace_top_right);
 			ImGui::DockBuilderDockWindow(LOGS_WINDOW_TITLE, dockspace_bot);
 			ImGui::DockBuilderFinish(dockspace_id);
 		}
 
 		source_code_window();
-		compiler_window();
+		quadruples_window();
 		symbol_table_window();
 		logs_window();
 

@@ -68,13 +68,13 @@ namespace s22
 	Symbol *
 	scope_get_sym(Scope *self, const char *id);
 
-	// sub-block, symbol_id, symbol_type, symbol_location, symbol flags
+	// symbol_id, symbol_type, symbol_location, symbol flags
 	using UI_Symbol_Row = std::array<std::string, 4>;
+	
 	// row
 	// scope closed
 	// scope open
 	struct UI_Symbol_Table;
-
 	using UI_Symbol_Table_Entry = std::variant<
 	    UI_Symbol_Row,
 		const Scope *,
@@ -83,9 +83,8 @@ namespace s22
 
 	struct UI_Symbol_Table
 	{
-		const Scope *scope;
-		std::vector<UI_Symbol_Table_Entry> table;
-		inline std::vector<UI_Symbol_Table_Entry>* operator->() { return &table; }
+		const Scope *scope; // scope pointer that represents this table
+		std::vector<UI_Symbol_Table_Entry> rows;
 	};
 
 	UI_Symbol_Table

@@ -22,7 +22,7 @@ namespace s22
 	lexer_delete_buffer(YY_BUFFER_STATE buf);
 
 	// UI buffer which holds the source code
-	struct Source_Code
+	struct UI_Source_Code
 	{
 		char buf[1<<13 + 2];// 8KB + 2 needed by flex
 		size_t count;
@@ -190,8 +190,11 @@ namespace s22
 		Backend backend;
 		
 		// UI elements
-		std::vector<std::string> logs;
-		Source_Code source_code;
+		std::vector<std::string> ui_logs;
+		UI_Source_Code ui_source_code;
+		UI_Program ui_program;
+		UI_Symbol_Table ui_table;
+
 		bool has_errors;
 	};
 

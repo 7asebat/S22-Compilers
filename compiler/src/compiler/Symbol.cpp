@@ -86,8 +86,11 @@ namespace s22
 		auto sym = push_entry<Symbol>(self);
 		*sym = symbol;
 
-		// move inner scope below and push it
-		self->table.emplace_back(inner_scope);
+		// move inner scope to bottom of table
+		inner_scope.idx_in_parent_table = self->table.size();
+		self->table.emplace_back(std::move(inner_scope));
+		
+		// update pointer
 		self = &std::get<Scope>(self->table.back());
 		return sym;
 	}
@@ -198,9 +201,9 @@ namespace s22
 			if (std::holds_alternative<Symbol>(entry))
 			{
 				auto &sym = std::get<Symbol>(entry);
-				table->emplace_back(UI_Symbol_Row{});
+				table.rows.emplace_back(UI_Symbol_Row{});
 
-				auto &symbol_row = std::get<UI_Symbol_Row>(table->back());
+				auto &symbol_row = std::get<UI_Symbol_Row>(table.rows.back());
 				symbol_row[0] = std::string{sym.id.data};
 				symbol_row[1] = std::format("{}", sym.type);
 				symbol_row[2] = std::format("{}", sym.defined_at);
@@ -213,7 +216,7 @@ namespace s22
 			else
 			{
 				auto &scope = std::get<Scope>(entry);
-				table->push_back(&scope);
+				table.rows.push_back(&scope);
 			}
 		}
 		return table;

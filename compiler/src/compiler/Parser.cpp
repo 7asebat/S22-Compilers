@@ -786,16 +786,16 @@ void
 yyerror(const s22::Source_Location *location, s22::Parser *p, const char *message)
 {
 	auto parser = s22::parser_instance();
-	auto &source_code = parser->source_code;
+	auto &source_code = parser->ui_source_code;
 
 	if (*location == s22::Source_Location{})
 	{
-		parser->logs.emplace_back(message);
+		parser->ui_logs.emplace_back(message);
 		return;
 	}
 	else
 	{
-		parser->logs.push_back(std::format("({}) {}", location->last_line, message));
+		parser->ui_logs.push_back(std::format("({}) {}", location->last_line, message));
 	}
 
 	// Read file line by line into buffer
@@ -824,7 +824,7 @@ yyerror(const s22::Source_Location *location, s22::Parser *p, const char *messag
 	}
 
 	// Log error
-	parser->logs.emplace_back(buf);
+	parser->ui_logs.emplace_back(buf);
 
 	// Print indicator
 	for (size_t i = 0; i < strlen(buf); i++)
@@ -835,7 +835,7 @@ yyerror(const s22::Source_Location *location, s22::Parser *p, const char *messag
 		else if (isspace(buf[i]) == false)
 			buf[i] = ' ';
 	}
-	parser->logs.emplace_back(buf);
+	parser->ui_logs.emplace_back(buf);
 }
 
 template <>

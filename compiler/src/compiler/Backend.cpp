@@ -39,26 +39,13 @@ namespace s22
 	// Condition
 	enum OPERAND_LOCATION
 	{
-		// NIL value
-		OP_NIL,
-
-		// General purpose registers
-		RAX, RBX, RCX, RDX,
-
-		// Reserved registers
-		RSP, RBP, RSI, RDI,
-
-		// Immediate value
-		OP_IMM,
-
-		// Memory address
-		OP_MEM,
-
-		// Label
-		OP_LBL,
-
-		// Condition
-		OP_COND
+		OP_NIL,				// NIL value
+		RAX, RBX, RCX, RDX, // general purpose registers
+		RSP, RBP, RSI, RDI, // reserved registers
+		OP_IMM,				// immediate value
+		OP_MEM,				// memory address
+		OP_LBL,				// label
+		OP_COND,			// condition
 	};
 
 	struct Memory_Address
@@ -85,7 +72,8 @@ namespace s22
 			uint64_t value;
 			Memory_Address address;
 		};
-		Label label;
+		Label label;	// set when loc is a label
+						// TODO: procedures carry both their label and their address here, change this
 	};
 
 	struct Instruction
@@ -94,18 +82,19 @@ namespace s22
 		Operand dst, src1, src2;
 
 		size_t operand_count;
-		Label label;
+		Label label; // adds a label to the instruction
 	};
 
 	struct IBackend
 	{
 		bool is_used[RDX + 1];
-
-		std::unordered_map<const Symbol*, Operand> variables;
-		std::stack<size_t> stack_frame;
-
-		std::vector<Instruction> program;
-		size_t label_counter;
+		
+		std::unordered_map<const Symbol*, Operand> variables;	// maps symbol to memory locations
+																// also maps procs to their labels/locations
+		
+		std::stack<size_t> stack_frame;		// carries how much space variables have used up to this point, within the current procedure
+		std::vector<Instruction> program;	// compiled program
+		size_t label_counter;				// used for label generation
 	};
 
 	Operand
@@ -233,7 +222,7 @@ namespace s22
 	}
 
 	inline static size_t
-	be_label_id(Backend self)
+	be_new_label_id(Backend self)
 	{
 		return self->label_counter++;
 	}
@@ -241,7 +230,7 @@ namespace s22
 	inline static void
 	be_logical_and(Backend self, Instruction ins)
 	{
-		auto label_id = be_label_id(self);
+		auto label_id = be_new_label_id(self);
 		Label end_if  = { .type = Label::AND_FALSE, .id = label_id };
 		Label end_all = { .type = Label::END_AND,   .id = label_id };
 
@@ -268,7 +257,7 @@ namespace s22
 	{
 		// a = b || c
 		// a = !(!b && !c)
-		auto label_id = be_label_id(self);
+		auto label_id = be_new_label_id(self);
 		Label end_if  = { .type = Label::OR_TRUE, .id = label_id };
 		Label end_all = { .type = Label::END_OR,  .id = label_id };
 
@@ -293,7 +282,7 @@ namespace s22
 	inline static void
 	be_logical_not(Backend self, Instruction ins)
 	{
-		auto label_id = be_label_id(self);
+		auto label_id = be_new_label_id(self);
 		Label end_if  = { .type = Label::NOT_TRUE, .id = label_id };
 		Label end_all = { .type = Label::END_NOT,  .id = label_id };
 
@@ -316,7 +305,7 @@ namespace s22
 	inline static void
 	be_compare(Backend self, Instruction ins)
 	{
-		auto label_id = be_label_id(self);
+		auto label_id = be_new_label_id(self);
 		Label end_if  = { .type = Label::COND_FALSE, .id = label_id };
 		Label end_all = { .type = Label::END_COND, 	 .id = label_id };
 
@@ -370,10 +359,10 @@ namespace s22
 		Operand proc_opr = {proc_lbl};
 		self->variables[proc->sym] = {proc_lbl};
 
-		// Begin a new stack frame
-		self->stack_frame.push(0);
-
-		int offset = 1; // [RBP]: Return address
+						// [RBP]:   old RBP
+		int offset = 1;	// [RBP+1]: return address
+						// [RBP+2]: return value if any, or first argument
+						// [RBP+3]: remaining arguments
 
 		// Return value
 		if (proc->sym->type.procedure->return_type != SEMEXPR_VOID)
@@ -381,9 +370,9 @@ namespace s22
 			uint64_t size = std::max(1ui64, proc->sym->type.procedure->return_type.array); // single or array
 
 			offset += size;
-			Memory_Address adr = { .base = RBP, .offset = offset }; // First spot below the RBP
+			Memory_Address adr = { .base = RBP, .offset = offset }; // First spot below RBP+1
 			
-			// Where the return address symbol is
+			// Where the return address symbol is, address is used alongsize the label
 			self->variables[proc->sym].address = adr;
 		}
 
@@ -394,7 +383,7 @@ namespace s22
 			uint64_t size = std::max(1ui64, sym->type.array); // in words
 
 			offset += size;
-			Memory_Address adr = { .base = RBP, .offset = offset }; // Consecutive spots below RBP
+			Memory_Address adr = { .base = RBP, .offset = offset }; // Consecutive spots below RBP+1
 
 			self->variables[sym] = { adr };
 			self->variables[sym].size = size;
@@ -501,6 +490,8 @@ namespace s22
 		int offset = 0;
 		auto &proc = *pcall->sym->type.procedure;
 
+		// calculate stack offset needed before the return address
+		// [args] [+ return value]
 		for (const auto &arg : proc.parameters)
 			offset += std::max(1ui64, arg.array);
 
@@ -633,7 +624,7 @@ namespace s22
 			{
 				Label lbl_true = {.type = Label::OR_TRUE, .id = branch_to.id};
 
-				Label left_is_false = {.type = Label::COND_FALSE, .id = be_label_id(self)};
+				Label left_is_false = {.type = Label::COND_FALSE, .id = be_new_label_id(self)};
 				be_branch_if_false(self, bin->left, left_is_false);
 				be_instruction(self, I_BR, lbl_true);
 
@@ -765,11 +756,11 @@ namespace s22
 		}
 
 		case AST::IF_COND: {
-			Label end_all = { .type = Label::END_ALL, .id = be_label_id(self) };
+			Label end_all = { .type = Label::END_ALL, .id = be_new_label_id(self) };
 
 			for (auto ifc = ast.as_if; ifc != nullptr; ifc = ifc->next)
 			{
-				Label end_if = { .type = Label::END_IF, .id = be_label_id(self) };
+				Label end_if = { .type = Label::END_IF, .id = be_new_label_id(self) };
 				be_branch_if_false(self, ifc->cond, end_if);
 				be_clear_reg_all(self);
 
@@ -784,13 +775,13 @@ namespace s22
 		}
 
 		case AST::SWITCH: {
-			Label end_switch = { .type = Label::END_SWITCH, .id = be_label_id(self) };
+			Label end_switch = { .type = Label::END_SWITCH, .id = be_new_label_id(self) };
 
 			auto sw = ast.as_switch;
 
 			for (auto &swc: sw->cases)
 			{
-				Label end_case = { .type = Label::END_CASE, .id = be_label_id(self) };
+				Label end_case = { .type = Label::END_CASE, .id = be_new_label_id(self) };
 				AST case_ast = { .kind = AST::SWITCH_CASE, .as_case = swc };
 				be_branch_if_false(self, case_ast, end_case);
 				be_clear_reg_all(self);
@@ -811,7 +802,7 @@ namespace s22
 		case AST::WHILE: {
 			auto wh = ast.as_while;
 
-			Label begin_while = { .type = Label::WHILE,     .id = be_label_id(self) };
+			Label begin_while = { .type = Label::WHILE,     .id = be_new_label_id(self) };
 			Label end_while   = { .type = Label::END_WHILE, .id = begin_while.id };
 
 			be_label(self, begin_while);
@@ -830,7 +821,7 @@ namespace s22
 		case AST::DO_WHILE: {
 			auto do_wh = ast.as_do_while;
 
-			Label begin_do_while = { .type = Label::WHILE,     .id = be_label_id(self) };
+			Label begin_do_while = { .type = Label::WHILE,     .id = be_new_label_id(self) };
 			Label end_do_while   = { .type = Label::END_WHILE, .id = begin_do_while.id };
 
 			be_label(self, begin_do_while);
@@ -849,7 +840,7 @@ namespace s22
 		case AST::FOR: {
 			auto loop = ast.as_for;
 
-			Label begin_for = { .type = Label::FOR,     .id = be_label_id(self) };
+			Label begin_for = { .type = Label::FOR,     .id = be_new_label_id(self) };
 			Label end_for   = { .type = Label::END_FOR, .id = begin_for.id };
 
 			// init
@@ -913,7 +904,6 @@ namespace s22
 
 		self->variables = {};
 		self->stack_frame = {};
-
 		self->program = {};
 		self->label_counter = 0;
 	}

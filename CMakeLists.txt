@@ -77,3 +77,5 @@ target_compile_definitions(compiler
 	PRIVATE
 		FONTS_DIR="${CMAKE_SOURCE_DIR}/thirdparty/fonts"
 )
+
+add_subdirectory(phase1)

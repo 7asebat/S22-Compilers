@@ -140,7 +140,7 @@ conditional:
 c_else:
 	%empty				{ $$ = {}; }
 	|
-	c_else_ifs			{ $$ = $c_else_ifs; };
+	c_else_ifs			{ $$ = $c_else_ifs; }
 	|
 	c_else_ifs
 	ELSE block			{ $$ = p->else_if_cond($1, {}, $block); }

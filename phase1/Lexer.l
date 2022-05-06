@@ -1,11 +1,16 @@
 /* DEFINITIONS SECTION */
 %{
     #include <stdlib.h>			// atoi
+    #include <stdint.h>			// size_t
+    #include <ctype.h>			// isspace
     #include "p1_Parser.hpp"	// Token definitions
 
     // Call location_update before each token is processed
-    int yycolno = 1; // Used to track current column in the line
+    inline static int yycolno = 1; // Used to track current column in the line
     #define YY_USER_ACTION location_update(yylloc);
+
+    inline static char source_code[(1<<13) + 2] = {};
+    inline static size_t source_code_count = 0;
 %}
 
 /* Use yylex(symbol_pointer, location_pointer) */
@@ -174,6 +179,45 @@ yyerror(const Source_Location *location, const char *message)
 {
 	location_print(stderr, location);
 	fprintf(stderr, " %s\n", message);
+	
+	// Read file line by line into buffer
+	char buf[1024 + 1] = {};
+	size_t position_in_source_code = 0;
+
+	size_t lines_to_read = location->first_line;
+	while (lines_to_read > 0)
+	{
+		size_t i = 0;
+		for (; i + 1 < sizeof(buf) && position_in_source_code < source_code_count; i++)
+		{
+			char c = source_code[position_in_source_code++];
+			if (c == '\n')
+			{
+				break;
+			}
+			else
+			{
+				buf[i] = c;
+			}
+		}
+		
+		buf[i] = '\0';
+		lines_to_read--;
+	}
+
+	// Log error
+	fprintf(stderr, " %s\n", buf);
+
+	// Print indicator
+	for (size_t i = 0; i < strlen(buf); i++)
+	{
+		if (i == location->first_column - 1)
+			buf[i] = '^';
+
+		else if (isspace(buf[i]) == false)
+			buf[i] = ' ';
+	}
+	fprintf(stderr, " %s\n", buf);
 }
 
 constexpr auto HELP_MESSAGE = R"""(
@@ -183,15 +227,12 @@ constexpr auto HELP_MESSAGE = R"""(
 int
 main(int argc, char* argv[])
 {
-	char source_code[(1<<13) + 2] = {};
-
 	if (argc != 2)
 	{
 		fprintf(stderr, "%s", HELP_MESSAGE);
 		return 1;
 	}
 
-	size_t fsize = 0;
 	if (auto f = fopen(argv[1], "r"); f == nullptr)
 	{
 		fprintf(stderr, "failed to open %s", argv[1]);
@@ -201,16 +242,16 @@ main(int argc, char* argv[])
 	{
 		// Get file size
 		fseek(f, 0, SEEK_END);
-		auto fsize = ftell(f);
+		source_code_count = ftell(f);
 	
 		rewind(f);
-		fread(source_code, fsize, 1, f);
+		fread(source_code, source_code_count, 1, f);
 
 		fprintf(stdout, "%s\n---\n", source_code);
 		fclose(f);
 	}
 
-	auto lexer_buf = lexer_scan_buffer(source_code, fsize+2);
+	auto lexer_buf = lexer_scan_buffer(source_code, source_code_count+2);
 	if (lexer_buf == nullptr)
 	{
 		fprintf(stderr, "lexer buffer is nullptr\n");

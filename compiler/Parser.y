@@ -48,6 +48,8 @@
 %token <value> AS_ADD AS_SUB AS_MUL AS_DIV AS_MOD AS_AND AS_OR AS_XOR AS_SHL AS_SHR
 //// Return value separator
 %token <value> ARROW
+//// Proc declaration
+%token <value> DBL_COLON
 
 /// Others
 %token <id> IDENTIFIER
@@ -214,7 +216,7 @@ decl_const:
 	;
 
 decl_proc:
-	IDENTIFIER ':' PROC							{ p->decl_proc_begin(); }
+	IDENTIFIER DBL_COLON PROC					{ p->decl_proc_begin(); }
 	'(' decl_proc_params ')' decl_proc_return	{ p->decl_proc_params_end(@IDENTIFIER, $IDENTIFIER, $decl_proc_return); }
 		block_no_action							{ $$ = p->decl_proc_end($IDENTIFIER); }
 	;

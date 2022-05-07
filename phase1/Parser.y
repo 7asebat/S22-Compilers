@@ -135,6 +135,8 @@
 %token <value> AS_ADD AS_SUB AS_MUL AS_DIV AS_MOD AS_AND AS_OR AS_XOR AS_SHL AS_SHR
 //// Return value separator
 %token <value> ARROW
+//// Proc declaration
+%token <value> DBL_COLON
 
 /// Others
 %token <id> IDENTIFIER
@@ -287,7 +289,7 @@ decl_const:
 	;
 
 decl_proc:
-	IDENTIFIER ':' PROC							
+	IDENTIFIER DBL_COLON PROC							
 	'(' decl_proc_params ')' decl_proc_return	
 		block_no_action							
 	;

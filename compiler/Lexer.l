@@ -29,7 +29,7 @@ lit_int   [0-9]+
 lit_float {lit_int}\.{lit_int}
 
 /* Operators */
-operator [<>+\-*/&|=^!~]
+operator [<>+\-*/%&|=^!~]
 
 /* A line can be preceeded by a line comment */
 line_comment "//"[^\n]*
@@ -48,6 +48,7 @@ case     return CASE;
 default  return DEFAULT;
 
 proc     return PROC;
+"::"     return DBL_COLON;
 return   return RETURN;
 "->"     return ARROW;
 

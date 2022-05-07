@@ -99,8 +99,9 @@ bool     return BOOL;
 "["|"]"     return *yytext;  
 {operator}  return *yytext;
 
-[ \t]+       ; /* skip whitespace */
-{line}       ; /* skip lines */
+[ \t]+          ; /* skip whitespace */
+{line_comment}  ; /* skip line comments */
+{line}          ; /* skip lines */
 
 .            yyerror(yylloc, nullptr, "unexpected character"); /* Any other character */
 %%

@@ -46,7 +46,6 @@ namespace s22
 		OP_MEM,				// memory address
 		OP_MEM_RANGE,		// memory range
 		OP_LBL,				// label
-		OP_COND,			// condition
 	};
 
 	struct Memory_Address

@@ -123,10 +123,12 @@ namespace s22
 	}
 
 	int
-	window_run(Frame_Proc frame)
+	window_run(Init_Proc init, Frame_Proc frame)
 	{
 		if (window_init() != 0)
 			return 1;
+
+		init();
 
 		bool not_done = true;
 		while (not_done)
@@ -135,28 +137,7 @@ namespace s22
 				break;
 
 			window_frame_start();
-
-			const auto viewport = ImGui::GetMainViewport();
-			ImGui::SetNextWindowPos(viewport->WorkPos);
-			ImGui::SetNextWindowSize(viewport->WorkSize);
-
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-			constexpr ImGuiWindowFlags FLAGS = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar
-				| ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
-				| ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground;
-
-			ImGui::Begin("DOCKSPACE Window", nullptr, FLAGS);
-			ImGui::PopStyleVar(3);
-
-			auto dockspace_id = ImGui::GetID(IMGUI_DOCKSPACE_ID);
-			ImGui::DockSpace(dockspace_id, ImVec2{}, ImGuiDockNodeFlags_PassthruCentralNode);
-
 			not_done = frame();
-
-			ImGui::End();
 			window_frame_render();
 		}
 

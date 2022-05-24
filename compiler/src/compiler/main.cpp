@@ -147,42 +147,49 @@ namespace s22
 	inline static void
 	symbol_table_build(UI_Symbol_Table &table, size_t depth)
 	{
-		for (auto &row : table.rows)
+		for (size_t i = 0; i < table.rows.size(); i++)
 		{
+			auto &row = table.rows[i];
 			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::Text("|%s", std::string(depth, '>').c_str());
 
 			if (std::holds_alternative<UI_Symbol_Row>(row))
 			{
-				for (const auto &cell : std::get<UI_Symbol_Row>(row))
+				for (bool first_cell = true; const auto &cell : std::get<UI_Symbol_Row>(row))
 				{
 					ImGui::TableNextColumn();
-					ImGui::Text("%s", cell.c_str());
+					if (first_cell)
+					{
+						ImGui::TreeNodeEx(cell.c_str(), ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanFullWidth);
+						first_cell = false;
+					}
+					else
+					{
+						ImGui::Text("%s", cell.c_str());
+					}
 				}
 			}
-			else if (std::holds_alternative<const Scope*>(row)) // Collapsed scope
+			else
 			{
-				auto label = std::format("expand##{}", (void*)table.scope);
-				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str()))
+				auto label = std::format("scope##{}_{}", depth, i);
+				ImGui::TableNextColumn();
+				if (ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_SpanFullWidth))
 				{
-					// scope ptr -> table
-					auto &scope = std::get<const Scope *>(row);
-					row = scope_get_ui_table(scope);
-				}
-			}
-			else // expanded scope
-			{
-				auto label = std::format("collapse##{}", (void*)table.scope);
-				if (ImGui::SameLine(); ImGui::SmallButton(label.c_str()))
-				{
-					// table -> scope ptr
-					auto &table = std::get<UI_Symbol_Table>(row);
-					row = table.scope;
+					if (std::holds_alternative<const Scope *>(row))
+					{
+						auto &scope = std::get<const Scope *>(row);
+						row = scope_get_ui_table(scope); // scope ptr -> table
+					}
+					
+					symbol_table_build(std::get<UI_Symbol_Table>(row), depth + 1);
+					ImGui::TreePop();
 				}
 				else
 				{
-					symbol_table_build(std::get<UI_Symbol_Table>(row), depth+1);
+					if (std::holds_alternative<const Scope *>(row) == false)
+					{
+						auto &table = std::get<UI_Symbol_Table>(row);
+						row = table.scope; // table -> scope ptr
+					}
 				}
 			}
 		}
@@ -200,14 +207,13 @@ namespace s22
 		{
 			ImGui::Text("Nothing to show...");
 		}
-		else if (ImGui::BeginTable("Symbol Table", 5, TABLE_FLAGS))
+		else if (ImGui::BeginTable("Symbol Table", 4, TABLE_FLAGS))
 		{
 			s22_defer { ImGui::EndTable(); };
 
 			ImGui::TableSetupScrollFreeze(1, 1);
-			ImGui::TableSetupColumn("Scope"); ImGui::TableSetupColumn("Symbol ID"); ImGui::TableSetupColumn("Type"); ImGui::TableSetupColumn("Location"); ImGui::TableSetupColumn("Constant/Initialized/Used");
+			ImGui::TableSetupColumn("Symbol ID"); ImGui::TableSetupColumn("Type"); ImGui::TableSetupColumn("Location"); ImGui::TableSetupColumn("Constant/Initialized/Used");
 			ImGui::TableHeadersRow();
-
 			symbol_table_build(ui_table, 0);
 		}
 	}
@@ -250,27 +256,27 @@ main(int, char**)
 {
 	using namespace s22;
 
-	s22::window_run([]() -> bool {
+	s22::window_run(
+		[] { ImGui::GetStyle().CellPadding = ImVec2{4.f, 8.f}; },
+		[] {
+		auto dockspace_id = ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
 		static bool first_dock = true;
 		if (first_dock)
 		{
-			first_dock = false;
-			auto dockspace_id = ImGui::GetID(IMGUI_DOCKSPACE_ID);
+			ImGui::DockBuilderRemoveNodeChildNodes(dockspace_id);
 
-			ImGui::DockBuilderRemoveNode(dockspace_id);
-			ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-			ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->WorkSize);
+			ImGuiID top_left, top_right, bot;
+			ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.7f, &top_left, &bot);
+			ImGui::DockBuilderSplitNode(top_left, ImGuiDir_Left, 0.5f, &top_left, &top_right);
 
-			auto dockspace_top_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.7f, nullptr, &dockspace_id);
-			auto dockspace_top_right = ImGui::DockBuilderSplitNode(dockspace_top_left, ImGuiDir_Right, 0.5f, nullptr, &dockspace_top_left);
-
-			auto dockspace_bot = dockspace_id;
-
-			ImGui::DockBuilderDockWindow(SOURCE_CODE_WINDOW_TITLE, dockspace_top_left);
-			ImGui::DockBuilderDockWindow(QUADRUPLES_WINDOW_TITLE, dockspace_top_right);
-			ImGui::DockBuilderDockWindow(SYMBOL_TABLE_WINDOW_TITLE, dockspace_top_right);
-			ImGui::DockBuilderDockWindow(LOGS_WINDOW_TITLE, dockspace_bot);
+			ImGui::DockBuilderDockWindow(SOURCE_CODE_WINDOW_TITLE, top_left);
+			ImGui::DockBuilderDockWindow(QUADRUPLES_WINDOW_TITLE, top_right);
+			ImGui::DockBuilderDockWindow(SYMBOL_TABLE_WINDOW_TITLE, top_right);
+			ImGui::DockBuilderDockWindow(LOGS_WINDOW_TITLE, bot);
+		
 			ImGui::DockBuilderFinish(dockspace_id);
+			first_dock = false;
 		}
 
 		source_code_window();

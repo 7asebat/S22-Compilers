@@ -1,7 +1,0 @@
-fn: proc(x: int, y: int) -> int
-{
-	z: int = x - y;
-	return z;
-}
-
-fn(1, 2) + 5;

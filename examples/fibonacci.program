@@ -1,9 +1,0 @@
-fibonacci: [10]int;
-
-fibonacci[0] = 1;
-fibonacci[1] = 1;
-
-for i: int = 2; i < 10; i += 1
-{
-    fibonacci[i] = fibonacci[i-1] + fibonacci[i-2];
-}

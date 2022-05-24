@@ -46,7 +46,8 @@ add_custom_command(
 
 set(COMPILER_SOURCE_FILES
 	compiler/src/compiler/AST.cpp
-	compiler/src/compiler/Backend.cpp
+	#compiler/src/compiler/Backend.cpp
+	compiler/src/compiler/Backend2.cpp
 	compiler/src/compiler/Symbol.cpp
 	compiler/src/compiler/Semantic_Expr.cpp
 	compiler/src/compiler/Parser.cpp

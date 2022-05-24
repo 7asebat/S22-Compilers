@@ -81,7 +81,7 @@ namespace s22
 		switch (op)
 		{
 		case Bin::SHL: case Bin::SHR: case Bin::MOD:
-			if (semexpr_is_integral(right.semexpr))
+			if (semexpr_is_integral(right.semexpr) == false)
 				return Error{ right.loc, "invalid operand" };
 
 		case Bin::L_AND: case Bin::L_OR:

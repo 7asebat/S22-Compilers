@@ -1,0 +1,58 @@
+x: int = 0;						// variable
+const const_x: bool = true;		// constant
+
+x %= 5 & 3 + 5;				// mathematical expression + assignment
+
+if x > 3						// logical + if-else
+{
+	x *= 2;
+}
+else if x < 2
+{
+	x <<= 4;
+}
+else
+{
+	x -= 1;
+}
+
+while x 		// while loop
+{
+	x -= 1;
+}
+
+y: [4]int;		// array declaration
+do
+{
+	y[0] = 0;
+	y[1] = 1;
+	y[2] = 2;
+	y[3] = 3;
+} while const_x == false;		// repeat-until -> do-while
+
+for i: int = 0; i < 40; i += 1	// for-loop
+{
+	y[i % 4] = i;
+}
+
+switch y[0]							// switch statement
+{
+	case 0       { y[0] = y[1]; }	// single case
+	case 1, 2, 3 { y[0] = y[2]; }	// multiple cases
+	default      { y[0] = y[3]; }	// default case
+}
+
+{					   // (BONUS) nested blocks
+	x: bool = false;	// redefinition
+	{
+		x: float = 3.14;
+		x += 1.0;
+	}
+	x = 1 && 1;
+}
+
+slope_intercept :: proc(m: float, x: float, c: float) -> float	// (BONUS) function declaration
+{
+	return m * x + c;
+}
+slope_intercept(1.0, 2.0, 3.0);	// (BONUS) function call

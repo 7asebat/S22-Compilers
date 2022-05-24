@@ -21,15 +21,16 @@ namespace s22
 	void
 	window_dispose();
 
-	constexpr auto IMGUI_DOCKSPACE_ID = "DOCKSPACE";
+	constexpr auto IMGUI_DOCKSPACE_ID = "DockSpace";
 	inline ImFont *IMGUI_FONT_SANS = nullptr;
 	inline ImFont *IMGUI_FONT_MONO = nullptr;
 
+	using Init_Proc = void (*)();
 	// Return false if app should exit
 	using Frame_Proc = bool (*)();
 
 	// Uses all functions above to run an event loop
 	// Executes the given frame function until it returns false
 	int
-	window_run(Frame_Proc frame);
+	window_run(Init_Proc init, Frame_Proc frame);
 }

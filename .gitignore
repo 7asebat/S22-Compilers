@@ -701,3 +701,6 @@ FodyWeavers.xsd
 
 [Bb]uild/
 *.ini
+vsbuild*
+.idea*
+CMakeSettings.json

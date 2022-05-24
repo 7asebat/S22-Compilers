@@ -7,8 +7,6 @@
 
 | op      | dst  | arg1   | arg2   | Description                                       |
 | ------- |------|--------|--------|---------------------------------------------------|
-| `PUSH`  |      | `V`    |        | Push `V` onto the stack                           |
-| `POP`   | `Rx` |        |        | Pop from the stack into `Rx`                      |
 | `OP`    | `Rx` | `V`    |        | `Rx = op V`                                       |
 | `OP`    | `Rx` | `V1`   | `V2`   | `Rx = V1 op V2`                                   |
 | `BR`    | `L`  |        |        | Branch to `L`                                     |

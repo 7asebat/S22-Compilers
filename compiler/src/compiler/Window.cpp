@@ -128,7 +128,8 @@ namespace s22
 		if (window_init() != 0)
 			return 1;
 
-		init();
+		if (init)
+			init();
 
 		bool not_done = true;
 		while (not_done)
@@ -137,7 +138,8 @@ namespace s22
 				break;
 
 			window_frame_start();
-			not_done = frame();
+			if (frame)
+				not_done = frame();
 			window_frame_render();
 		}
 

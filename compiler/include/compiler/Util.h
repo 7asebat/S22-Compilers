@@ -190,9 +190,9 @@ namespace s22
 
 		// creates a new error with the given error message
 		template<typename... TArgs>
-		explicit Error(const char *fmt, TArgs &&...args) : msg({}), loc({})					{ msg = std::format(fmt, std::forward<TArgs>(args)...).c_str(); }
+		explicit Error(std::string_view fmt, TArgs &&...args) : msg({}), loc({})				{ msg = std::vformat(fmt, std::make_format_args(std::forward<TArgs>(args)...)).c_str(); }
 		template<typename... TArgs>
-		Error(Source_Location loc, const char *fmt, TArgs &&...args) : msg({}), loc(loc)	{ msg = std::format(fmt, std::forward<TArgs>(args)...).c_str(); }
+		Error(Source_Location loc, std::string_view fmt, TArgs &&...args) : msg({}), loc(loc)	{ msg = std::vformat(fmt, std::make_format_args(std::forward<TArgs>(args)...)).c_str(); }
 
 		Error(Source_Location loc, const Error &other) : msg(other.msg), loc(loc) {}		// Overwrite location
 

@@ -57,11 +57,11 @@ namespace s22
 		inline Operand(Label lbl)				{ *this = {}; loc = OP_LBL; label = lbl; }
 
 		template<typename... TArgs>
-		inline explicit Operand(const char *fmt, TArgs &&...args)
+		inline explicit Operand(std::string_view fmt, TArgs &&...args)
 		{
 			*this = {};
 			loc = OP_SYM;
-			sym = std::format(fmt, std::forward<TArgs>(args)...).c_str();
+			sym = std::vformat(fmt, std::make_format_args(std::forward<TArgs>(args)...)).c_str();
 		}
 
 		union // immediate value/memory offset

@@ -1,25 +1,9 @@
 # S22-Compilers
-Language compiler in flex+bison
+Compiler for a toy Turing-complete programming language.
 
-## Get started
-```cmd
-> cmake -Bbuild
-> cmake --build build
-> build\compiler.exe
-```
+The compiler emits Quadruples and shows the Symbol Table on compilation.
 
-## Syntax
-[Full syntax example](examples/full.program)
+## Screenshots
+![image](https://github.com/7asebat/S22-Compilers/assets/44498156/382eb7ac-2a95-4ec5-9afc-df005f1bd4e6)
+![image](https://github.com/7asebat/S22-Compilers/assets/44498156/3e788f3c-fc68-40bd-bef3-966053dae8fb)
 
-## Checklist
-### Phase 1
-- [x] [Lexer](compiler/Lexer.l)
-- [x] [Parser](compiler/Parser.y)
-- [x] Simple syntax error handler
-
-### Phase 2
-- [x] Design a suitable and extensible format for the ast_symbol table
-- [x] Design suitable action rules to produce the output quadruples
-- [x] Implement a proper syntax error handler
-- [x] Build a simple semantic analyzer
-- [x] Implement a simple GUI to insert the input source code and show the output quadruples, ast_symbol table, and syntax and semantic errors (if exist).

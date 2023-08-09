@@ -84,6 +84,9 @@ namespace s22
 
 		inline bool
 		operator==(const Literal &other) { return this->value == other.value; }
+
+		inline bool
+		operator!=(const Literal &other) { return !this->operator==(other); }
 	};
 
 	// Constructors for different types of ASTs
